@@ -22,4 +22,3 @@ Si precisa che la specifica richiede la realizzazione del software sia per l'app
 
 Per progetti misti Unix/Windows e' a scelta quale delle due applicazioni sviluppare per uno dei due sistemi.
 
-jojojoj
