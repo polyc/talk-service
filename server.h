@@ -11,7 +11,7 @@ typedef struct usr_list_receiver_thread_s{
   struct sockaddr_in* address;
 } usr_list_receiver_thread_t;
 
-//user list element
+//user list typical element
 typedef struct usr_list_server_elem_s{
   char[16] user_name;
   struct listen_thread_t listen_thread;

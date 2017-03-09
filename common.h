@@ -7,7 +7,7 @@ typedef struct listen_thread_s{
   struct sockaddr_in* address;
 } listen_thread_t;
 
-// send/receive user list buffer
+// send/receive user list buffer slot's typical handled element
 typedef struct user_list_buffer_s{
   char[16] user_name;
   struct listen_thread_t listen_thread;
