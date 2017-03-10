@@ -6,11 +6,11 @@ The service tracks of a ready-to-talk clients list.
 
 Clients (generally resident on different machines) acquire the track-list
 
-only after the connection with server, then they show that list to user
+only after they're connected with server, then they show that list to user,
 
 so he'll be able to enstablish a connection with another user.
 
-Linked-paired clients permits users sending and receiveng messages and
+Linked-paired clients permit users sending and receiveng messages and
 
 they're unvailable to other conversation istances until one stops "talking".
 
