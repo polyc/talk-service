@@ -1,5 +1,4 @@
 #include common.h
-#include <netinet/in.h>
 
 //user list typical element
 typedef struct usr_list_client_elem_s{
