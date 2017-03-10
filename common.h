@@ -1,7 +1,20 @@
-
+//included libraries
+#include <errno.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <signal.h>
+#include <unistd.h>
 
-// listen thread struct
+//data structure passed to threads on creation
+typedef struct thread_args_s{
+  unsigned int process_id;
+  unsigned int thread_id;
+} thread_args_t;
+
+// client listen thread's info-struct into generic user list
 typedef struct listen_thread_s{
   int socket;
   struct sockaddr_in* address;
