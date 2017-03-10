@@ -1,7 +1,4 @@
-
-#include <netinet/in.h>
 #include common.h
-
 
 //user list
 
