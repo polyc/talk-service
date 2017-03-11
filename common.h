@@ -8,8 +8,8 @@
 #include <signal.h>
 #include <unistd.h>
 
-
-#define SERVER_IP "...." //add IP address of the server   
+#define SERVER_PORT 1024
+#define SERVER_IP "...." //add IP address of the server
 
 #define GENERIC_ERROR_HELPER(cond, errCode, msg) do {
         if (cond) {
@@ -25,6 +25,7 @@
 //data structure passed to threads on creation
 typedef struct thread_args_s{
   unsigned int thread_id;
+  struct sockaddr_in* client_addr;
 } thread_args_t;
 
 //user list sender/receiver thread's single slot buffer
