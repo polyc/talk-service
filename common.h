@@ -25,7 +25,7 @@
 //data structure passed to threads on creation
 typedef struct thread_args_s{
   unsigned int thread_id;
-  struct sockaddr_in* client_addr;
+  struct sockaddr_in* addr;
 } thread_args_t;
 
 //user list sender/receiver thread's single slot buffer
