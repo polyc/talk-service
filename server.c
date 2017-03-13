@@ -1,5 +1,24 @@
 #include "server.h"
 
+void create_user_list_element(struct usr_list_elem_t* element, struct sockaddr_in* client_addr);{
+  char* client_ip_buf = inet_ntoa(thread_args.addr); //parsing addr to simplified dotted form
+  element.client_ip = (char*)malloc(sizeof(client_ip_buf));//client ip buffer
+  //inet_ntoa() ISN'T THEAD SAFE
+  //so we NEED TO WAIT ON A SEMAPHORE before call it (TO DO),
+  element->client_ip = *(client_ip_buf);
+  element.a_flag = AVAILABLE;
+
+  //receiving username
+  while ((recv_bytes = recv(args->socket, buf, buf_len, 0)) < 0) {
+    if (errno == EINTR) continue;
+    ERROR_HELPER(-1, "Cannot read from socket");
+  }
+  //filling elemnt.user_name
+  element.user_name = buf;
+
+  return;
+}
+
 //client-process/server-thread communication routine
 void* client-process/server-thread_connection_handler(void* arg){
   thread_args_t* args = (thread_args_t*)arg;
@@ -7,12 +26,25 @@ void* client-process/server-thread_connection_handler(void* arg){
   int ret, recv_bytes;
 
   //user list element, single slot receive buffer
-  char buf[sizeof(usr_list_server_elem_t)];
+  char buf[16];
   size_t buf_len = sizeof(buf);
 
   //quit command buffer
   char* quit_command = SERVER_COMMAND;
   size_t quit_command_len = strlen(quit_command);
+
+  //available command buffer
+  char* a_command = AVAILABLE;
+  size_t a_command_len = strlen(a_command);
+
+  //unavailable command buffer
+  char* u_command = UNAVAILABLE;
+  size_t u_command_len = strlen(u_command);
+
+  //user list element buffer
+  struct usr_list_elem_t* element = (usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
+  //filling element
+  create_user_list_element(element, thread_args.addr);
 
   while(1){
     //read message from client
@@ -27,6 +59,7 @@ void* client-process/server-thread_connection_handler(void* arg){
     if (recv_bytes == quit_command_len && !memcmp(buf, quit_command, quit_command_len)) break;
   }
 
+  //CLOSE OPERATIONS (TO BE COMPLETED)
   //close client_desc
   ret = close(args->socket);
   ERROR_HELPER(ret, "Cannot close socket for incoming connection");
