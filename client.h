@@ -9,4 +9,5 @@ typedef struct usr_list_client_elem_s{
 
 typedef struct listen_thread_args_s{
   int socket;
+  struct sockaddr_in* addr;
 }listen_thread_args_t;
