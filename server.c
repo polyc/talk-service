@@ -2,14 +2,38 @@
 
 //client-process/server-thread communication routine
 void* client-process/server-thread_connection_handler(void* arg){
-  handler_args_t* args = (handler_args_t*)arg;
+  thread_args_t* args = (thread_args_t*)arg;
 
   int ret, recv_bytes;
 
+  //user list element, single slot receive buffer
   char buf[sizeof(usr_list_server_elem_t)];
   size_t buf_len = sizeof(buf);
-  size_t msg_len;
-  //unfinished
+
+  //quit command buffer
+  char* quit_command = SERVER_COMMAND;
+  size_t quit_command_len = strlen(quit_command);
+
+  while(1){
+    //read message from client
+    while ((recv_bytes = recv(args->socket, buf, buf_len, 0)) < 0) {
+      if (errno == EINTR) continue;
+      ERROR_HELPER(-1, "Cannot read from socket");
+    }
+
+    printf("message read\n");
+
+    // quit command check
+    if (recv_bytes == quit_command_len && !memcmp(buf, quit_command, quit_command_len)) break;
+  }
+
+  //close client_desc
+  ret = close(args->socket);
+  ERROR_HELPER(ret, "Cannot close socket for incoming connection");
+
+  free(args->addr);
+  free(args);
+  pthread_exit(NULL);
 }
 
 int int main(int argc, char const *argv[]) {
@@ -51,8 +75,9 @@ int int main(int argc, char const *argv[]) {
       pthread_t thread;
 
       // put arguments for the new thread into a buffer
-        handler_args_t* thread_args = malloc(sizeof(handler_args_t));
-        thread_args->socket_desc = client_desc;
+        thread_args_t* thread_args = malloc(sizeof(thread_args_t));
+        thread_args->socket = client_desc;
+        thread_args->thread_id = 0; //new_thread_id(),not written yet;
         thread_args->addr = client_addr;
 
         ret = pthread_create(&thread, NULL, connection_handler, (void*)thread_args);
