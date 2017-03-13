@@ -42,7 +42,7 @@ typedef struct user_list_buffer_s{
 //user list
 
 //user list typical element
-typedef struct usr_list_server_elem_s{
+typedef struct usr_list_elem_s{
   char[16] user_name;
   char* client_ip;
   char a_flag;
