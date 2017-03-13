@@ -21,14 +21,6 @@
 #define ERROR_HELPER(ret, msg)          GENERIC_ERROR_HELPER((ret < 0), errno, msg)
 #define PTHREAD_ERROR_HELPER(ret, msg)  GENERIC_ERROR_HELPER((ret != 0), ret, msg)
 
-
-//data structure passed to threads on creation
-typedef struct thread_args_s{
-  int socket;
-  unsigned int thread_id;
-  struct sockaddr_in* addr;
-} thread_args_t;
-
 //user list sender/receiver thread's single slot buffer
 typedef struct user_list_buffer_s{
   char[16] user_name;
