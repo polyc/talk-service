@@ -11,6 +11,10 @@
 #define SERVER_PORT 1024
 #define SERVER_IP "...." //add IP address of the server
 
+#define AVAILABLE   'a'
+#define UNAVAILABLE 'u'
+#define QUIT        'q'
+
 #define GENERIC_ERROR_HELPER(cond, errCode, msg) do {
         if (cond) {
             fprintf(stderr, "%s: %s\n", msg, strerror(errCode));

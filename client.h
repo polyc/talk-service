@@ -6,3 +6,7 @@ typedef struct usr_list_client_elem_s{
   struct listen_thread_t listen_thread;
   char a_flag;
 }usr_list_client_elem_t;
+
+typedef struct listen_thread_args_s{
+  int socket;
+}listen_thread_args_t;
