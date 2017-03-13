@@ -13,6 +13,8 @@
 
 #define SERVER_PORT 1024
 #define SERVER_IP "...." //add IP address of the server
+#define CLIENT_THREAD_LISTEN_PORT "1025"
+#define CLIENT_THREAD_RECEIVER_PORT "1026"
 
 #define AVAILABLE   'a'
 #define UNAVAILABLE 'u'
@@ -29,33 +31,20 @@
 #define PTHREAD_ERROR_HELPER(ret, msg)  GENERIC_ERROR_HELPER((ret != 0), ret, msg)
 
 
-
 //user list sender/receiver thread's single slot buffer
 typedef struct user_list_buffer_s{
   char[16] user_name;
-  struct listen_thread_t listen_thread;
+  char* client_ip;
   short user_elem_pos;
   char a_flag;
 }user_list_buffer_t;
 
 //user list
-// client listen thread's info-struct into generic user element
-typedef struct listen_thread_s{
-  int socket;
-  struct sockaddr_in* address;
-} listen_thread_t;
-
-//client receiver thread's info-struct into generic user element
-typedef struct usr_list_receiver_thread_s{
-  int socket;
-  struct sockaddr_in* address;
-} usr_list_receiver_thread_t;
 
 //user list typical element
 typedef struct usr_list_server_elem_s{
   char[16] user_name;
-  struct listen_thread_t listen_thread;
-  struct usr_list_receiver_thread_t recv_thread;
+  char* client_ip;
   char a_flag;
 }usr_list_server_elem_t;
 
