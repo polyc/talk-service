@@ -12,7 +12,12 @@
 #include "common.h"
 
 void* listen_thread_routine(void *args){
+  struct listen_thread_args_t* arg = args;
+  int socket = arg.socket;
 
+  //thread_listen listening for incoming connections
+  ret = listen(socket, 1);
+  ERROR_HELPER(ret, "Cannot listen on listen_thread socket");
 }
 
 
@@ -38,7 +43,7 @@ int main(){
   ERROR_HELPER(socket_listen_thread_desc, "error while creating client listen socket descriptor");
 
   //data structure for listen thread
-  struct sockaddr_in listen_address;
+  struct sockaddr_in listen_address = {0};
   serv_addr.sin_len     = sizeof(sockaddr_in);
   serv_addr.sin_family  = AF_INET;
   serv_addr.sin_port    = htons(SERVER_PORT);
@@ -85,7 +90,7 @@ int main(){
   //connection to server
   ret = connect(socket_server_desc, (const struct sockaddr)&serv_addr, sizeof(serv_addr));
   ERROR_HELPER(ret, "error trying to connect to server");
-  
+
   //sending init data to server
   ret = send()
 

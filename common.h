@@ -1,3 +1,6 @@
+#ifndef __COMMON_H__
+#define __COMMON_H__
+
 //included libraries
 #include <errno.h>
 #include <netinet/in.h>
@@ -24,6 +27,8 @@
 
 #define ERROR_HELPER(ret, msg)          GENERIC_ERROR_HELPER((ret < 0), errno, msg)
 #define PTHREAD_ERROR_HELPER(ret, msg)  GENERIC_ERROR_HELPER((ret != 0), ret, msg)
+
+
 
 //user list sender/receiver thread's single slot buffer
 typedef struct user_list_buffer_s{
@@ -53,3 +58,6 @@ typedef struct usr_list_server_elem_s{
   struct usr_list_receiver_thread_t recv_thread;
   char a_flag;
 }usr_list_server_elem_t;
+
+
+#endif
