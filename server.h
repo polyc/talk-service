@@ -3,12 +3,13 @@
 #define MAXUSERS 10
 #define SERVER_QUIT "QUIT"
 
-void create_user_list_element(struct usr_list_elem_t* element, struct sockaddr_in* client_addr);
+void create_user_list_element(struct usr_list_elem_t* element, char* client_ip);
+
 void* client-process/server-thread_connection_handler(void* arg);
 
 //data structure passed to threads on creation
 typedef struct thread_args_s{
   int socket;
   unsigned int thread_id;
-  struct sockaddr_in* addr;
+  char* addr; //dotted form
 } thread_args_t;
