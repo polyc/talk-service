@@ -114,7 +114,7 @@ int int main(int argc, char const *argv[]) {
         thread_args->addr = *(client_ip_buf); //copying dotted address into struct
 
         //thread spawning
-        ret = pthread_create(&thread, NULL, connection_handler, (void*)thread_args);
+        ret = pthread_create(&thread, NULL, client-process/server-thread_connection_handler, (void*)thread_args);
         PTHREAD_ERROR_HELPER(ret, "Could not create a new thread");
 
         //new buffer for new incoming connection
