@@ -1,11 +1,7 @@
 #include "server.h"
 
-void create_user_list_element(struct usr_list_elem_t* element, struct sockaddr_in* client_addr);{
-  char* client_ip_buf = inet_ntoa(thread_args.addr); //parsing addr to simplified dotted form
-  element.client_ip = (char*)malloc(sizeof(client_ip_buf));//client ip buffer
-  //inet_ntoa() ISN'T THEAD SAFE
-  //so we NEED TO WAIT ON A SEMAPHORE before call it (TO DO),
-  element->client_ip = *(client_ip_buf);
+void create_user_list_element(struct usr_list_elem_t* element, char* client_ip){
+  element.client_ip = client_ip; //dotted form
   element.a_flag = AVAILABLE;
 
   //receiving username
@@ -108,11 +104,16 @@ int int main(int argc, char const *argv[]) {
       pthread_t thread;
 
       // put arguments for the new thread into a buffer
-        thread_args_t* thread_args = malloc(sizeof(thread_args_t));
-        thread_args->socket = client_desc;
-        thread_args->thread_id = 0; //new_thread_id(),not written yet;
-        thread_args->addr = client_addr;
 
+        thread_args_t* thread_args = malloc(sizeof(thread_args_t));
+        thread_args.socket = client_desc;
+        thread_args.thread_id = 0; //new_thread_id(),not written yet;
+
+        char* client_ip_buf = inet_ntoa(client_addr.sin_addr); //parsing addr to simplified dotted form
+        thread_args.addr = (char*)malloc(sizeof(client_ip_buf));// memory allocation for dotted address
+        thread_args->addr = *(client_ip_buf); //copying dotted address into struct
+
+        //thread spawning
         ret = pthread_create(&thread, NULL, connection_handler, (void*)thread_args);
         PTHREAD_ERROR_HELPER(ret, "Could not create a new thread");
 
