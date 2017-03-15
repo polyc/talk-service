@@ -69,7 +69,7 @@ void* usr_list_recv_thread_routine(void *args){
   ERROR_HELPER(ret, "Cannot accept connection on user list receiver thread socket");
 
   //allocating buffer to write user list element
-  char* buffer_elem = malloc(USERLIST_BUFF_SIZE);
+  char* buffer_elem[USERLIST_BUFF_SIZE];
   int elem_buf_len = 0;
 
   //receiving user list element from server
@@ -104,8 +104,8 @@ int main(){
   int ret;
 
   //socket descriptor to connect to server
-  int socket_server_desc = socket(AF_INET, SOCK_STREAM, 0);
-  ERROR_HELPER(socket_server_desc, "Error while creating client socket descriptor");
+  int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
+  ERROR_HELPER(socket_desc, "Error while creating client socket descriptor");
 
   //data structure for the connection to the server
   struct sockaddr_in serv_addr = {0};
@@ -123,25 +123,25 @@ int main(){
   ERROR_HELPER(usrl_recv_socket, "Error while creating user list receiver thread socket descriptor");
 
   //address structure for listen thread socket
-  struct sockaddr_in listen_address = {0};
+  struct sockaddr_in incoming_client_addr = {0};
   serv_addr.sin_len                 = sizeof(sockaddr_in);
   serv_addr.sin_family              = AF_INET;
   serv_addr.sin_port                = htons(CLIENT_THREAD_LISTEN_PORT);
 
   //address structure for user list receiver thread socket
-  struct sockaddr_in usrl_recv_address = {0};
-  usrl_recv_address.sin_len            = sizeof(sockaddr_in);
-  usrl_recv_address.sin_family         = AF_INET;
-  usrl_recv_address.sin_port           = htons(CLIENT_THREAD_RECEIVER_PORT);
+  struct sockaddr_in usrl_sender_address = {0};
+  usrl_sender_address.sin_len            = sizeof(sockaddr_in);
+  usrl_sender_address.sin_family         = AF_INET;
+  usrl_sender_address.sin_port           = htons(CLIENT_THREAD_RECEIVER_PORT);
 
 
 
   //thread listen
   //
   //creating parameters for listen thread funtion
-  listen_thread_args_t* t_listen_args = malloc(sizeof(listen_thread_args_t*));
+  listen_thread_args_t* t_listen_args = (listen_thread_args_t*) malloc(sizeof(listen_thread_args_t));
   t_listen_args.socket = socket_listen_thread_desc;
-  t_listen_args.addr   = listen_address;
+  t_listen_args.addr   = incoming_client_addr;
 
   //creating and spawning thread listen with parameters
   pthread_t thread_listen;
@@ -158,9 +158,9 @@ int main(){
   //user list receiver thread
   //
   //creating parameters for user list receiver thread funtion
-  listen_thread_args_t* usrl_recv_args = malloc(sizeof(listen_thread_args_t*));
+  listen_thread_args_t* usrl_recv_args = (listen_thread_args_t*)malloc(sizeof(listen_thread_args_t));
   t_listen_args.socket = usrl_recv_socket;
-  t_listen_args.addr   = usrl_recv_address;
+  t_listen_args.addr   = usrl_sender_address;
 
   //creating and spawning user list receiver thread with parameters
   pthread_t thread_usrl_recv;
@@ -176,7 +176,7 @@ int main(){
 
 
   //connection to server
-  ret = connect(socket_server_desc, (const struct sockaddr)&serv_addr, sizeof(serv_addr));
+  ret = connect(socket_desc, (const struct sockaddr)&serv_addr, sizeof(serv_addr));
   ERROR_HELPER(ret, "Error trying to connect to server");
 
 
@@ -187,18 +187,19 @@ int main(){
   strncpy(username_buf, username, 16);
 
   //sending username to server
-  ret = send(socket_server_desc, username_buf, strlen(username_buf), 0);
+  ret = send(socket_desc, username_buf, strlen(username_buf), 0);
 
   //making sure all bytes have been sent
   int bytes_left = strlen(msg_to_send);
   int bytes_sent = 0;
 
   while (bytes_left > 0) {
-      ret = send(socket_server_desc, username_buf + bytes_sent, bytes_left, 0);
+      ret = send(socket_desc, username_buf + bytes_sent, bytes_left, 0);
       if (ret == -1 && errno == EINTR) continue;
       ERROR_HELPER(ret, "Error while sending username to server");
 
       bytes_left -= ret;
       bytes_sent += ret;
     }
+  exit(EXIT_SUCCESS);
 }
