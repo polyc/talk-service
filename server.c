@@ -2,7 +2,7 @@
 
 void create_user_list_element(struct usr_list_elem_t* element, char* client_ip){
   element.client_ip = client_ip; //dotted form
-  element.a_flag = AVAILABLE;
+  element.a_flag    = AVAILABLE;
 
   //receiving username
   while ((recv_bytes = recv(args->socket, buf, buf_len, 0)) < 0) {
@@ -25,22 +25,25 @@ void* client-process/server-thread_connection_handler(void* arg){
   char buf[16];
   size_t buf_len = sizeof(buf);
 
-  //quit command buffer
-  char* quit_command = SERVER_COMMAND;
+  //COMMAND BUFFERS
+  char* quit_command = SERVER_COMMAND;//quit command buffer
   size_t quit_command_len = strlen(quit_command);
 
-  //available command buffer
-  char* a_command = AVAILABLE;
+  char* a_command = AVAILABLE;//available command buffer
   size_t a_command_len = strlen(a_command);
 
-  //unavailable command buffer
-  char* u_command = UNAVAILABLE;
+  char* u_command = UNAVAILABLE;//unavailable command buffer
   size_t u_command_len = strlen(u_command);
 
   //user list element buffer
   struct usr_list_elem_t* element = (usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
+
   //filling element
   create_user_list_element(element, thread_args.addr);
+
+  /*TODO:
+    -list insertion
+  */
 
   while(1){
     //read message from client
@@ -53,11 +56,12 @@ void* client-process/server-thread_connection_handler(void* arg){
 
     // quit command check
     if (recv_bytes == quit_command_len && !memcmp(buf, quit_command, quit_command_len)) break;
+
+    //TODO: -other commands management
   }
 
   //CLOSE OPERATIONS (TO BE COMPLETED)
-  //close client_desc
-  ret = close(args->socket);
+  ret = close(args->socket);//close client_desc
   ERROR_HELPER(ret, "Cannot close socket for incoming connection");
 
   free(args->addr);
@@ -67,6 +71,8 @@ void* client-process/server-thread_connection_handler(void* arg){
 
 int int main(int argc, char const *argv[]) {
   int ret, server_desc, client_desc;
+
+  //TODO: -list initialization
 
   struct sockaddr_in server_addr = {0};
   int sockaddr_len = sizeof(struct sockaddr_in);
@@ -79,7 +85,7 @@ int int main(int argc, char const *argv[]) {
   server_addr.sin_family      = AF_INET;
   server_addr.sin_port        = htons(SERVER_PORT); // don't forget about network byte order!
 
-  //We enable SO_REUSEADDR to quickly restart our server after a crash
+  //we enable SO_REUSEADDR to quickly restart our server after a crash
   int reuseaddr_opt = 1;
   ret = setsockopt(socket_desc, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_opt, sizeof(reuseaddr_opt));
   ERROR_HELPER(ret, "Cannot set SO_REUSEADDR option");
@@ -101,24 +107,22 @@ int int main(int argc, char const *argv[]) {
       if (client_desc == -1 && errno == EINTR) continue; // check for interruption by signals
       ERROR_HELPER(client_desc, "Cannot open socket for incoming connection");
 
-      pthread_t thread;
-
       // put arguments for the new thread into a buffer
+      thread_args_t* thread_args = malloc(sizeof(thread_args_t));
+      thread_args.socket         = client_desc;
+      thread_args.thread_id      = 0; //new_thread_id(),not written yet;
 
-        thread_args_t* thread_args = malloc(sizeof(thread_args_t));
-        thread_args.socket = client_desc;
-        thread_args.thread_id = 0; //new_thread_id(),not written yet;
+      char* client_ip_buf = inet_ntoa(client_addr.sin_addr); //parsing addr to simplified dotted form
+      thread_args.addr    = (char*)malloc(sizeof(client_ip_buf));// memory allocation for dotted address
+      thread_args->addr   = *(client_ip_buf); //copying dotted address into struct
 
-        char* client_ip_buf = inet_ntoa(client_addr.sin_addr); //parsing addr to simplified dotted form
-        thread_args.addr = (char*)malloc(sizeof(client_ip_buf));// memory allocation for dotted address
-        thread_args->addr = *(client_ip_buf); //copying dotted address into struct
+      //thread spawning
+      pthread_t thread;
+      ret = pthread_create(&thread, NULL, client-process/server-thread_connection_handler, (void*)thread_args);
+      PTHREAD_ERROR_HELPER(ret, "Could not create a new thread");
 
-        //thread spawning
-        ret = pthread_create(&thread, NULL, client-process/server-thread_connection_handler, (void*)thread_args);
-        PTHREAD_ERROR_HELPER(ret, "Could not create a new thread");
-
-        //new buffer for new incoming connection
-        client_addr = calloc(1, sizeof(struct sockaddr_in));
+      //new buffer for new incoming connection
+      client_addr = calloc(1, sizeof(struct sockaddr_in));
     }
 
     exit(EXIT_SUCCESS);
