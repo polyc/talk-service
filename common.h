@@ -46,7 +46,7 @@ typedef struct usr_list_elem_s{
   char[16] user_name;
   char* client_ip;
   char a_flag;
-}usr_list_server_elem_t;
+}usr_list_elem_t;
 
 
 #endif
