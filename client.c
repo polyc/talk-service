@@ -11,6 +11,11 @@
 
 #include "common.h"
 
+//function to process user list element and adding it to user list
+void userList_handle(char* elem, int len){
+
+
+}
 
 
 //thread listen routine
@@ -44,25 +49,53 @@ void* usr_list_recv_thread_routine(void *args){
 
   struct listen_thread_args_t* arg = args;
 
+  //getting arguments from args used for connection
   int socket = arg.socket;
-  struct sockaddr_in* address = arg.addr;
+  struct sockaddr_in* thread_addr = arg.addr;
+
+  //allocating address struct for incoming connection from server
+  struct sockaddr_in* server_addr = calloc(1, sizeof(sockaddr_in));
 
   //binding user list receiver thread address to user list receiver thread socket
-  ret = bind(socket_listen_thread_desc, (const struct sockaddr*)&address, sizeof(struct sockaddr_in));
+  ret = bind(socket, (const struct sockaddr*)&thread_addr, sizeof(struct sockaddr_in));
   ERROR_HELPER(ret, "Error while binding address to user list receiver thread socket");
 
   //user list receiver thread listening for incoming connections
   ret = listen(socket, 1);
   ERROR_HELPER(ret, "Cannot listen on user list receiver thread socket");
 
-  /*
-  *
-  *
-  *  not finished
-  *
-  *
-  *
-  */
+  //accepting connection on user list receiver thread socket
+  ret = accept(socket, (struct sockaddr*) server_addr, (socklen_t*) sizeof(sockaddr_in));
+  ERROR_HELPER(ret, "Cannot accept connection on user list receiver thread socket");
+
+  //allocating buffer to write user list element
+  char* buffer_elem = malloc(USERLIST_BUFF_SIZE);
+  int elem_buf_len = 0;
+
+  //receiving user list element from server
+  while(1){
+    int bytes_read = 0;
+    char* buf[USERLIST_BUFF_SIZE];
+
+    //making sure to read all bytes of the message
+    while (bytes_read <= USERLIST_BUFF_SIZE) {
+        ret = recv(socket, buf + bytes_read, 1, 0);
+
+        if (ret == -1 && errno == EINTR) continue;
+        ERROR_HELPER(ret, "Error while receiving user element from server");
+
+        if (buf[bytes_read] == '\n') break; // end of message
+
+        bytes_read++;
+    }
+
+    buf[bytes_read] = '\0';
+    elem_buf_len = bytes_read;
+
+    //processing user list element with userList_handle function
+    userList_handle(buf, elem_buf_len);
+  }
+
 
 }
 
