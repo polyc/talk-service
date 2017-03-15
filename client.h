@@ -9,5 +9,5 @@ typedef struct listen_thread_args_s{
 
 
 void* usr_list_recv_thread_routine(void *args);
-
 void* listen_thread_routine(void *args);
+void userList_handle(char* elem, int len);
