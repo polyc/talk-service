@@ -1,6 +1,6 @@
 #include "server.h"
 
-void create_user_list_element(struct usr_list_elem_t* element, char* client_ip){
+void create_user_list_element(struct usr_list_elem_t* element, char* client_ip, thread_args_t* args){
   element.client_ip = client_ip; //dotted form
   element.a_flag    = AVAILABLE;
 
@@ -39,7 +39,9 @@ void* client-process/server-thread_connection_handler(void* arg){
   struct usr_list_elem_t* element = (usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
 
   //filling element
-  create_user_list_element(element, thread_args.addr);
+  create_user_list_element(element, thread_args.addr, args);
+
+  printf("message read\n");
 
   /*TODO:
     -list insertion
@@ -108,7 +110,7 @@ int int main(int argc, char const *argv[]) {
       ERROR_HELPER(client_desc, "Cannot open socket for incoming connection");
 
       // put arguments for the new thread into a buffer
-      thread_args_t* thread_args = malloc(sizeof(thread_args_t));
+      thread_args_t* thread_args = (thread_args_t*)malloc(sizeof(thread_args_t)); // cambiare, fare array di args
       thread_args.socket         = client_desc;
       thread_args.thread_id      = 0; //new_thread_id(),not written yet;
 
