@@ -10,6 +10,7 @@
 #include <string.h>
 #include <signal.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #define SERVER_PORT 1024
 #define SERVER_IP "192.168.0.1" //add IP address of the server
