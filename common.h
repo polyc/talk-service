@@ -10,7 +10,7 @@
 #include <string.h>
 #include <signal.h>
 #include <unistd.h>
-#include <pthread.h>
+#include <sys/socket.h>
 
 #define SERVER_PORT 1024
 #define SERVER_IP "192.168.0.1" //add IP address of the server
@@ -27,7 +27,7 @@
             fprintf(stderr, "%s: %s\n", msg, strerror(errCode));  \
             exit(EXIT_FAILURE);                                   \
         }                                                         \
-    } while(0)
+    } while(0)                                                    \
 
 #define ERROR_HELPER(ret, msg)          GENERIC_ERROR_HELPER((ret < 0), errno, msg)
 #define PTHREAD_ERROR_HELPER(ret, msg)  GENERIC_ERROR_HELPER((ret != 0), ret, msg)

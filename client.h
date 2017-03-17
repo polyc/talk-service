@@ -1,6 +1,3 @@
-
-#define CLIENT_IP "..." //add client IP address
-
 typedef struct listen_thread_args_s{
   int socket;
   struct sockaddr_in* addr;

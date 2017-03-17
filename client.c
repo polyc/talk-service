@@ -1,13 +1,3 @@
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
-#include <arpa/inet.h>
-
 #include "common.h"
 
 /*
@@ -105,7 +95,7 @@ void* usr_list_recv_thread_routine(void *args){
 int main(){
 
   int ret;
-
+  printf("flag");
   //socket descriptor to connect to server
   int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(socket_desc, "Error while creating client socket descriptor");
@@ -115,6 +105,8 @@ int main(){
   serv_addr.sin_family         = AF_INET;
   serv_addr.sin_port           = htons(SERVER_PORT);
   serv_addr.sin_addr.s_addr    = inet_addr(SERVER_IP);
+
+  printf("flag 0");
 
   /*
   //socket descriptor for listen thread
@@ -180,7 +172,7 @@ int main(){
   ret = connect(socket_desc, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
   ERROR_HELPER(ret, "Error trying to connect to server");
 
-
+  printf("flag 1");
   //sending buffer init data for user list
   //creating buffer for username and availability flag
   char* username = "regibald_94"; //temporary username
@@ -193,7 +185,7 @@ int main(){
   //making sure all bytes have been sent
   int bytes_left = strlen(username_buf);
   int bytes_sent = 0;
-
+  printf("flag 2");
   while (bytes_left > 0){
       ret = send(socket_desc, username_buf + bytes_sent, bytes_left, 0);
       if (ret == -1 && errno == EINTR){
@@ -205,6 +197,7 @@ int main(){
       bytes_sent += ret;
   }
 
+  printf("flag 3");
   // close the socket
   ret = close(socket_desc);
   ERROR_HELPER(ret, "Cannot close socket");
