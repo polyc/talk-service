@@ -11,6 +11,8 @@
 
 #include "common.h"
 
+/*
+
 //function to process user list element and adding it to user list
 void userList_handle(char* elem, int len){
 
@@ -34,14 +36,14 @@ void* listen_thread_routine(void *args){
   ret = listen(socket, 1);
   ERROR_HELPER(ret, "Cannot listen on listen_thread socket");
 
-  /*
+
   *
   *
   *  P2P chat implementation
   *
   *
   *
-  */
+
 
 }
 
@@ -99,6 +101,8 @@ void* usr_list_recv_thread_routine(void *args){
 
 }
 
+*/
+
 int main(){
 
   int ret;
@@ -109,11 +113,11 @@ int main(){
 
   //data structure for the connection to the server
   struct sockaddr_in serv_addr = {0};
-  serv_addr.sin_len            = sizeof(sockaddr_in);
   serv_addr.sin_family         = AF_INET;
   serv_addr.sin_port           = htons(SERVER_PORT);
   serv_addr.sin_addr.s_addr    = inet_addr(SERVER_IP);
 
+  /*
   //socket descriptor for listen thread
   int socket_listen_thread_desc = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(socket_listen_thread_desc, "Error while creating client listen socket descriptor");
@@ -124,13 +128,11 @@ int main(){
 
   //address structure for listen thread socket
   struct sockaddr_in incoming_client_addr = {0};
-  serv_addr.sin_len                 = sizeof(sockaddr_in);
   serv_addr.sin_family              = AF_INET;
   serv_addr.sin_port                = htons(CLIENT_THREAD_LISTEN_PORT);
 
   //address structure for user list receiver thread socket
   struct sockaddr_in usrl_sender_address = {0};
-  usrl_sender_address.sin_len            = sizeof(sockaddr_in);
   usrl_sender_address.sin_family         = AF_INET;
   usrl_sender_address.sin_port           = htons(CLIENT_THREAD_RECEIVER_PORT);
 
@@ -173,16 +175,16 @@ int main(){
   //
   //detached from user list receiver thread
 
-
+  */
 
   //connection to server
-  ret = connect(socket_desc, (const struct sockaddr)&serv_addr, sizeof(serv_addr));
+  ret = connect(socket_desc, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
   ERROR_HELPER(ret, "Error trying to connect to server");
 
 
   //sending buffer init data for user list
   //creating buffer for username and availability flag
-  char username* = "regibald_94"; //temporary username
+  char* username = "regibald_94"; //temporary username
   char username_buf[16];
   strncpy(username_buf, username, 16);
 
@@ -190,16 +192,25 @@ int main(){
   ret = send(socket_desc, username_buf, strlen(username_buf), 0);
 
   //making sure all bytes have been sent
-  int bytes_left = strlen(msg_to_send);
+  int bytes_left = strlen(username_buf);
   int bytes_sent = 0;
 
-  while (bytes_left > 0) {
+  while (bytes_left > 0){
       ret = send(socket_desc, username_buf + bytes_sent, bytes_left, 0);
-      if (ret == -1 && errno == EINTR) continue;
+      if (ret == -1 && errno == EINTR){
+        continue;
+      }
       ERROR_HELPER(ret, "Error while sending username to server");
 
       bytes_left -= ret;
       bytes_sent += ret;
-    }
+  }
+
+  // close the socket
+  ret = close(socket_desc);
+  ERROR_HELPER(ret, "Cannot close socket");
+
+
   exit(EXIT_SUCCESS);
+
 }
