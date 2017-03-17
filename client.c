@@ -96,6 +96,7 @@ int main(){
 
   int ret;
   printf("flag");
+  fflush(NULL);
   //socket descriptor to connect to server
   int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(socket_desc, "Error while creating client socket descriptor");
@@ -107,6 +108,7 @@ int main(){
   serv_addr.sin_addr.s_addr    = inet_addr(SERVER_IP);
 
   printf("flag 0");
+  fflush(NULL);
 
   /*
   //socket descriptor for listen thread
@@ -171,8 +173,10 @@ int main(){
   //connection to server
   ret = connect(socket_desc, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
   ERROR_HELPER(ret, "Error trying to connect to server");
+  fflush(NULL);
 
   printf("flag 1");
+  fflush(NULL);
   //sending buffer init data for user list
   //creating buffer for username and availability flag
   char* username = "regibald_94"; //temporary username

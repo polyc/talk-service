@@ -126,12 +126,14 @@ int main(int argc, char const *argv[]) {
   struct sockaddr_in* client_addr = calloc(1, sizeof(struct sockaddr_in));
 
   printf("flag 0");
+  fflush(NULL);
 
   // loop to manage incoming connections spawning handler threads
     while (1) {
       client_desc = accept(server_desc, (struct sockaddr*) client_addr, (socklen_t*) &sockaddr_len);
       if (client_desc == -1 && errno == EINTR) continue; // check for interruption by signals
       ERROR_HELPER(client_desc, "Cannot open socket for incoming connection");
+      fflush(NULL);
 
       // put arguments for the new thread into a buffer
       thread_args_t* thread_args = (thread_args_t*)malloc(sizeof(thread_args_t)); // cambiare, fare array di args

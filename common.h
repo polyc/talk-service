@@ -13,7 +13,7 @@
 #include <sys/socket.h>
 
 #define SERVER_PORT 1024
-#define SERVER_IP "192.168.0.1" //add IP address of the server
+#define SERVER_IP "127.0.0.1" //add IP address of the server
 #define CLIENT_THREAD_LISTEN_PORT "1025"
 #define CLIENT_THREAD_RECEIVER_PORT "1026"
 #define USERLIST_BUFF_SIZE 50
@@ -25,6 +25,7 @@
 #define GENERIC_ERROR_HELPER(cond, errCode, msg) do {             \
         if (cond) {                                               \
             fprintf(stderr, "%s: %s\n", msg, strerror(errCode));  \
+            fflush(NULL);                                         \
             exit(EXIT_FAILURE);                                   \
         }                                                         \
     } while(0)                                                    \
