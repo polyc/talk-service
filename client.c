@@ -1,5 +1,16 @@
-#include "common.h"
+#include <sys/socket.h>
+#include <pthread.h>
+#include <errno.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <signal.h>
+#include <unistd.h>
 
+#include "client.h"
+#include "common.h"
 /*
 
 //function to process user list element and adding it to user list
@@ -92,11 +103,10 @@ void* usr_list_recv_thread_routine(void *args){
 
 */
 
-int main(){
+int main(int argc, char* argv[]){
 
   int ret;
-  printf("flag");
-  fflush(NULL);
+  fprintf(stderr, "flag 0\n");
   //socket descriptor to connect to server
   int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(socket_desc, "Error while creating client socket descriptor");
@@ -107,8 +117,7 @@ int main(){
   serv_addr.sin_port           = htons(SERVER_PORT);
   serv_addr.sin_addr.s_addr    = inet_addr(SERVER_IP);
 
-  printf("flag 0");
-  fflush(NULL);
+  fprintf(stderr, "flag 1\n");
 
   /*
   //socket descriptor for listen thread
@@ -171,12 +180,10 @@ int main(){
   */
 
   //connection to server
-  ret = connect(socket_desc, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
+  ret = connect(socket_desc, (struct sockaddr*) &serv_addr, sizeof(struct sockaddr_in));
   ERROR_HELPER(ret, "Error trying to connect to server");
-  fflush(NULL);
 
-  printf("flag 1");
-  fflush(NULL);
+  fprintf(stderr, "flag 2\n");
   //sending buffer init data for user list
   //creating buffer for username and availability flag
   char* username = "regibald_94"; //temporary username
@@ -189,7 +196,9 @@ int main(){
   //making sure all bytes have been sent
   int bytes_left = strlen(username_buf);
   int bytes_sent = 0;
-  printf("flag 2");
+
+  fprintf(stderr, "flag 3\n");
+
   while (bytes_left > 0){
       ret = send(socket_desc, username_buf + bytes_sent, bytes_left, 0);
       if (ret == -1 && errno == EINTR){
@@ -201,7 +210,7 @@ int main(){
       bytes_sent += ret;
   }
 
-  printf("flag 3");
+  fprintf(stderr, "flag 4\n");
   // close the socket
   ret = close(socket_desc);
   ERROR_HELPER(ret, "Cannot close socket");

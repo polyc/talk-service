@@ -1,6 +1,3 @@
-#include "common.h"
-
-#define MAXUSERS 10
 #define MAX_CONN_QUEUE 5
 #define SERVER_QUIT "QUIT"
 
