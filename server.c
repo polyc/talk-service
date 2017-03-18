@@ -59,15 +59,31 @@ void* connection_handler(void* arg){
 
   fprintf(stderr, "flag 2\n");
 
-  //receiving username
-  while ((recv_bytes = recv(args->socket, buf, sizeof(buf), 0)) < 0) {
-    if (errno == EINTR) continue;
-    ERROR_HELPER(-1, "Cannot read from socket");
+  int bytes_read = 0;
+
+  // messages longer than sizeof(buf) will not be read
+  while (bytes_read <= sizeof(buf)) {
+      ret = recv(args->socket, buf + bytes_read, 1, 0);
+
+      if (ret == -1 && errno == EINTR) continue;
+      ERROR_HELPER(ret, "Errore nella lettura da socket");
+
+      // controlling last byte read
+      if (buf[bytes_read] == '\n') break; // end of message
+
+      bytes_read++;
   }
 
+
+  buf[bytes_read] = '\0'; //adding string terminator
+
+
   //print test
-  for (size_t i = 0; i < sizeof(buf) ; i++) {
-    printf("%c",buf[i]);
+  for (size_t i = 0; i < 16 ; i++) {
+    if(buf[i]=='\0'){ //if end of string break
+      break;
+    }
+    printf("%c",buf[i]); 
   }
   printf("\n");
   //filling element

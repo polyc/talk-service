@@ -106,8 +106,11 @@ void* usr_list_recv_thread_routine(void *args){
 int main(int argc, char* argv[]){
 
   int ret;
-
   fprintf(stderr, "flag 0\n");
+
+  //getting username from argv
+  char* username = argv[1];
+  strcat(username, "\n"); //concatenating "\n" for server recv function
 
   //socket descriptor to connect to server
   int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
@@ -186,23 +189,24 @@ int main(int argc, char* argv[]){
   ERROR_HELPER(ret, "Error trying to connect to server");
 
   fprintf(stderr, "flag 2\n");
+
   //sending buffer init data for user list
   //creating buffer for username and availability flag
-  char* username = "regibald_94"; //temporary username
   char username_buf[16];
-  strncpy(username_buf, username, 16);
+  strncpy(username_buf, username, strlen(username));
 
   //sending username to server
-  ret = send(socket_desc, username_buf, strlen(username_buf), 0);
+  ret = send(socket_desc, username_buf, strlen(username), 0);
 
   //making sure all bytes have been sent
-  int bytes_left = strlen(username_buf);
+  int bytes_left = strlen(username);
   int bytes_sent = 0;
 
   fprintf(stderr, "flag 3\n");
 
   while (bytes_left > 0){
       ret = send(socket_desc, username_buf + bytes_sent, bytes_left, 0);
+
       if (ret == -1 && errno == EINTR){
         continue;
       }
@@ -213,7 +217,7 @@ int main(int argc, char* argv[]){
   }
 
   fprintf(stderr, "flag 4\n");
-  // close the socket
+  // close socket
   ret = close(socket_desc);
   ERROR_HELPER(ret, "Cannot close socket");
 
