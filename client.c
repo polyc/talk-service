@@ -106,12 +106,9 @@ void* usr_list_recv_thread_routine(void *args){
 int main(int argc, char* argv[]){
 
   int ret;
-<<<<<<< HEAD
-  printf("flag");
-  
-=======
+
   fprintf(stderr, "flag 0\n");
->>>>>>> c6ec818d1f748f7d6a325a2ae9cc88a5994c1555
+
   //socket descriptor to connect to server
   int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(socket_desc, "Error while creating client socket descriptor");
