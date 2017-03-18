@@ -1,5 +1,16 @@
-#include "server.h"
+#include <sys/socket.h>
 #include <pthread.h>
+#include <errno.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <signal.h>
+#include <unistd.h>
+
+#include "server.h"
+#include "common.h"
 
 /*void create_user_list_element(usr_list_elem_t* element, char* ip, thread_args_t* args, char* buf){
   element->client_ip = ip; //dotted form
@@ -44,9 +55,9 @@ void* connection_handler(void* arg){
   */
 
   //user list element buffer
-  struct usr_list_elem_t* element = (struct usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
+  //struct usr_list_elem_t* element = (struct usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
 
-  printf("flag 2");
+  fprintf(stderr, "flag 2\n");
 
   //receiving username
   while ((recv_bytes = recv(args->socket, buf, sizeof(buf), 0)) < 0) {
@@ -63,9 +74,9 @@ void* connection_handler(void* arg){
   //create_user_list_element(element, thread_args.addr, args, buf);
 
 
-  printf("message read\n");
+  fprintf(stderr, "message read\n");
 
-  /*TODO:
+  /*TD:
     -list insertion
   */
 
@@ -76,12 +87,10 @@ void* connection_handler(void* arg){
       ERROR_HELPER(-1, "Cannot read from socket");
     }
 
-    printf("message read\n");
-
     // quit command check
     //if (recv_bytes == quit_command_len && !memcmp(buf, quit_command, quit_command_len)) break;
 
-    //TODO: -other commands management
+    //TD: -other commands management
   }
 
   //CLOSE OPERATIONS (TO BE COMPLETED)
@@ -96,7 +105,7 @@ void* connection_handler(void* arg){
 int main(int argc, char const *argv[]) {
   int ret, server_desc, client_desc;
 
-  //TODO: -list initialization
+  //TD:list initialization
 
   struct sockaddr_in server_addr = {0};
   int sockaddr_len = sizeof(struct sockaddr_in);
@@ -125,7 +134,7 @@ int main(int argc, char const *argv[]) {
   // we allocate client_addr dynamically and initialize it to zero
   struct sockaddr_in* client_addr = calloc(1, sizeof(struct sockaddr_in));
 
-  printf("flag 0");
+  fprintf(stderr, "flag 0\n");
 
   // loop to manage incoming connections spawning handler threads
     while (1) {
@@ -133,6 +142,7 @@ int main(int argc, char const *argv[]) {
       if (client_desc == -1 && errno == EINTR) continue; // check for interruption by signals
       ERROR_HELPER(client_desc, "Cannot open socket for incoming connection");
 
+      fprintf(stderr, "flag 1\n");
       // put arguments for the new thread into a buffer
       thread_args_t* thread_args = (thread_args_t*)malloc(sizeof(thread_args_t)); // cambiare, fare array di args
       thread_args->socket         = client_desc;
@@ -140,9 +150,9 @@ int main(int argc, char const *argv[]) {
 
       char* client_ip_buf = inet_ntoa(client_addr->sin_addr); //parsing addr to simplified dotted form
       thread_args->addr   = (char*)malloc(sizeof(client_ip_buf));// memory allocation for dotted address
-      memcpy(thread_args->addr, client_ip_buf, sizeof(client_ip_buf)); //copying dotted address into struct
+      memcpy(thread_args->addr, client_ip_buf, sizeof(*(client_ip_buf))); //copying dotted address into struct
 
-      printf("flag 1");
+
       //thread spawning
       pthread_t thread;
       ret = pthread_create(&thread, NULL, connection_handler, (void*)thread_args);
@@ -150,6 +160,9 @@ int main(int argc, char const *argv[]) {
 
       //new buffer for new incoming connection
       client_addr = calloc(1, sizeof(struct sockaddr_in));
+
+      ret = pthread_detach(thread);
+      PTHREAD_ERROR_HELPER(ret, "Could not detach thread");
     }
 
     exit(EXIT_SUCCESS);
