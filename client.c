@@ -96,6 +96,7 @@ int main(){
 
   int ret;
   printf("flag");
+  
   //socket descriptor to connect to server
   int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(socket_desc, "Error while creating client socket descriptor");
