@@ -275,6 +275,8 @@ int main(int argc, char* argv[]){
 
   fprintf(stderr, "flag 2\n");
 
+
+
   //sending buffer init data for user list
   //creating buffer for username and availability flag
   char username_buf[17];
@@ -313,7 +315,6 @@ int main(int argc, char* argv[]){
   ret = close(socket_desc);
   ERROR_HELPER(ret, "Cannot close socket");
 
-  //while(1){} //so that the client doesnt close the connection with the server
 
   exit(EXIT_SUCCESS);
 
