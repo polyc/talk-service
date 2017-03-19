@@ -124,7 +124,7 @@ int main(int argc, char* argv[]){
 
   fprintf(stderr, "flag 1\n");
 
-  /*
+
   //socket descriptor for listen thread
   int socket_listen_thread_desc = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(socket_listen_thread_desc, "Error while creating client listen socket descriptor");
@@ -182,7 +182,7 @@ int main(int argc, char* argv[]){
   //
   //detached from user list receiver thread
 
-  */
+
 
   //connection to server
   ret = connect(socket_desc, (struct sockaddr*) &serv_addr, sizeof(struct sockaddr_in));
@@ -192,7 +192,7 @@ int main(int argc, char* argv[]){
 
   //sending buffer init data for user list
   //creating buffer for username and availability flag
-  char username_buf[16];
+  char username_buf[17];
   strncpy(username_buf, username, strlen(username));
 
   //sending username to server
