@@ -83,9 +83,9 @@ void* connection_handler(void* arg){
     if(buf[i]=='\0'){ //if end of string break
       break;
     }
-    printf("%c",buf[i]); 
+    fprintf(stdout, s"%c",buf[i]);
   }
-  printf("\n");
+  fprintf(stdout, "\n");
   //filling element
   //create_user_list_element(element, thread_args.addr, args, buf);
 
@@ -116,6 +116,53 @@ void* connection_handler(void* arg){
   free(args->addr);
   free(args);
   pthread_exit(NULL);
+}
+
+void* sender_routine(void* arg){
+  sender_thread_args_t* args = (sender_thread_args_t*)arg;
+
+  struct sockaddr_in rec_addr = {0};
+  rec_addr.sin_family         = AF_INET;
+  rec_addr.sin_port           = htons(CLIENT_THREAD_RECEIVER_PORT);
+  rec_addr.sin_addr.s_addr    = inet_addr(args->receiver_addr);
+
+  int ret, bytes_left, bytes_sent;
+
+  int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
+  ERROR_HELPER(ret, "Cannot create sender thread socket");
+
+  ret = connect(socket_desc, (struct sockaddr*) &rec_addr, sizeof(struct sockaddr_in));
+  ERROR_HELPER(ret, "Error trying to connect to client receicer thread");
+
+  //sending test buffer
+  char buf[USERLIST_BUFF_SIZE] = {0};
+  buf[0] = "1\n";
+
+  //sending #mod
+  while (bytes_left > 0){
+      ret = send(socket_desc, buf + bytes_sent, bytes_left, 0);
+      if (ret == -1 && errno == EINTR){
+        continue;
+      }
+      ERROR_HELPER(ret, "Error while sending username to server");
+
+      bytes_left -= ret;
+      bytes_sent += ret;
+  }
+  buf = {0};
+
+  //sendig username ecc.
+  buf = "regibald_94\n127.0.0.1\na\n0\n";
+  while (bytes_left > 0){
+      ret = send(socket_desc, buf + bytes_sent, bytes_left, 0);
+      if (ret == -1 && errno == EINTR){
+        continue;
+      }
+      ERROR_HELPER(ret, "Error while sending username to server");
+
+      bytes_left -= ret;
+      bytes_sent += ret;
+  }
 }
 
 int main(int argc, char const *argv[]) {
@@ -159,6 +206,10 @@ int main(int argc, char const *argv[]) {
       ERROR_HELPER(client_desc, "Cannot open socket for incoming connection");
 
       fprintf(stderr, "flag 1\n");
+
+      //thread spawning
+
+      //client management thread
       // put arguments for the new thread into a buffer
       thread_args_t* thread_args = (thread_args_t*)malloc(sizeof(thread_args_t)); // cambiare, fare array di args
       thread_args->socket         = client_desc;
@@ -168,16 +219,24 @@ int main(int argc, char const *argv[]) {
       thread_args->addr   = (char*)malloc(sizeof(client_ip_buf));// memory allocation for dotted address
       memcpy(thread_args->addr, client_ip_buf, sizeof(*(client_ip_buf))); //copying dotted address into struct
 
-
-      //thread spawning
-      pthread_t thread;
-      ret = pthread_create(&thread, NULL, connection_handler, (void*)thread_args);
+      pthread_t thread_client;
+      ret = pthread_create(&thread_client, NULL, connection_handler, (void*)thread_args);
       PTHREAD_ERROR_HELPER(ret, "Could not create a new thread");
+
+      //sender thread
+      sender_thread_args_t* sender_args = (sender_thread_args_t*)malloc(sizeof(sender_thread_args_t));
+      sender_args->receiver_addr = (char*)malloc(sizeof(client_ip_buf));
+      memcpy(sender_args->receiver_addr, client_ip_buf, sizeof(*(client_ip_buf)));
+
+      pthread_t thread_sender;
+      ret = pthread_create(&thread_sender, NULL, sender_routine, (void*)sender_args);
+      PTHREAD_ERROR_HELPER(ret, "Could not create sender thread");
+
 
       //new buffer for new incoming connection
       client_addr = calloc(1, sizeof(struct sockaddr_in));
 
-      ret = pthread_detach(thread);
+      ret = pthread_detach(thread_client);
       PTHREAD_ERROR_HELPER(ret, "Could not detach thread");
     }
 

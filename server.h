@@ -8,6 +8,12 @@ typedef struct thread_args_s{
   char* addr; //dotted form
 } thread_args_t;
 
+typedef struct sender_thread_args_s{
+  char* receiver_addr;
+}sender_thread_args_t;
+
 //void create_user_list_element(usr_list_elem_t* element, char* ip, thread_args_t* args, char* buf);
 
 void* connection_handler(void* arg);
+
+void* sender_routine(void* arg);
