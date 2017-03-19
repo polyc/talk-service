@@ -68,7 +68,7 @@ void* connection_handler(void* arg){
     -list insertion
   */
 
-  while(1){
+  //while(1){
     /*//read message from client
     while ((recv_bytes = recv(args->socket, buf, buf_len, 0)) < 0) {
       if (errno == EINTR) continue;
@@ -79,8 +79,8 @@ void* connection_handler(void* arg){
     //if (recv_bytes == quit_command_len && !memcmp(buf, quit_command, quit_command_len)) break;
 
     //TD: -other commands management*/
-  }
-
+  //}
+  fprintf(stderr, "flag 10\n");
   //CLOSE OPERATIONS (TO BE COMPLETED)
   ret = close(args->socket);//close client_desc
   ERROR_HELPER(ret, "Cannot close socket for incoming connection");
@@ -93,10 +93,14 @@ void* connection_handler(void* arg){
 void* sender_routine(void* arg){
   sender_thread_args_t* args = (sender_thread_args_t*)arg;
 
+  fprintf(stderr, "flag 11\n");
+
   struct sockaddr_in rec_addr = {0};
   rec_addr.sin_family         = AF_INET;
   rec_addr.sin_port           = htons(CLIENT_THREAD_RECEIVER_PORT);
   rec_addr.sin_addr.s_addr    = inet_addr("127.0.0.1"); //args->receiver_addr
+
+  fprintf(stderr, "flag 12\n");
 
   int ret, bytes_left, bytes_sent = 0;
 
@@ -106,16 +110,21 @@ void* sender_routine(void* arg){
   ret = connect(socket_desc, (struct sockaddr*) &rec_addr, sizeof(struct sockaddr_in));
   ERROR_HELPER(ret, "Error trying to connect to client receicer thread");
 
+  fprintf(stderr, "flag 13\n");
+
   //sending test buffer
   char* buf= (char*)calloc(USERLIST_BUFF_SIZE, sizeof(char));
   buf[0] = '1';
   buf[1] = '\n';
   bytes_left = 2;
 
+  fprintf(stderr, "flag 14\n");
+
   fprintf(stdout, "prova\n");
   //sending #mod
   while (bytes_left > 0){
       ret = send(socket_desc, buf + bytes_sent, bytes_left, 0);
+      fprintf(stderr, "flag 15\n");
       if (ret == -1 && errno == EINTR){
         continue;
       }
@@ -126,13 +135,20 @@ void* sender_routine(void* arg){
   }
   bzero(buf, USERLIST_BUFF_SIZE);
 
+  fprintf(stderr, "flag 16\n");
 
   //sendig username ecc.
-  buf = "regibald_94-127.0.0.1-a-0-";
+  buf = "regibald_94-127.0.0.1-a-0-\n";
   bytes_left = strlen(buf);
   bytes_sent = 0;
+
+  fprintf(stderr, "flag 17\n");
+
   while (bytes_left > 0){
       ret = send(socket_desc, buf + bytes_sent, bytes_left, 0);
+
+      fprintf(stderr, "flag 17\n");
+
       if (ret == -1 && errno == EINTR){
         continue;
       }
@@ -141,8 +157,13 @@ void* sender_routine(void* arg){
       bytes_left -= ret;
       bytes_sent += ret;
   }
-  bzero(buf, USERLIST_BUFF_SIZE);
-  fprintf(stderr, "end sender routine\n");
+
+  fprintf(stderr, "flag 18\n");
+
+  //free(buf);
+  //fprintf(stdout, "end sender routine\n");
+  pthread_exit(NULL);
+
 }
 
 int main(int argc, char const *argv[]) {
@@ -226,32 +247,42 @@ int main(int argc, char const *argv[]) {
       }
       fprintf(stdout, "\n");
 
+      fprintf(stderr, "flag4");
       //copying username into struct
       memcpy(thread_args->client_user_name, &buf, bytes_read);
+
+      fprintf(stderr, "flag5");
 
       char* client_ip_buf = inet_ntoa(client_addr->sin_addr); //parsing addr to simplified dotted form
       thread_args->addr   = (char*)malloc(sizeof(client_ip_buf));// memory allocation for dotted address
       memcpy(thread_args->addr, client_ip_buf, sizeof(*(client_ip_buf))); //copying dotted address into struct
 
+      fprintf(stderr, "flag6");
+
       pthread_t thread_client;
       ret = pthread_create(&thread_client, NULL, connection_handler, (void*)thread_args);
       PTHREAD_ERROR_HELPER(ret, "Could not create a new thread");
+
+      ret = pthread_detach(thread_client);
+      PTHREAD_ERROR_HELPER(ret, "Could not detach thread");
+
+      fprintf(stderr, "flag7");
 
       //sender thread
       sender_thread_args_t* sender_args = (sender_thread_args_t*)malloc(sizeof(sender_thread_args_t));
       sender_args->receiver_addr = (char*)malloc(sizeof(client_ip_buf));
       memcpy(sender_args->receiver_addr, client_ip_buf, sizeof(*(client_ip_buf)));
 
+      fprintf(stderr, "flag8");
+
       pthread_t thread_sender;
       ret = pthread_create(&thread_sender, NULL, sender_routine, (void*)sender_args);
       PTHREAD_ERROR_HELPER(ret, "Could not create sender thread");
 
+      fprintf(stderr, "flag9");
 
       //new buffer for new incoming connection
       //client_addr = calloc(1, sizeof(struct sockaddr_in));
-
-      ret = pthread_detach(thread_client);
-      PTHREAD_ERROR_HELPER(ret, "Could not detach thread");
 
       ret = pthread_detach(thread_sender);
       PTHREAD_ERROR_HELPER(ret, "Could not detach thread");
