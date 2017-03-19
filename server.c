@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <signal.h>
 #include <unistd.h>
 
@@ -83,7 +84,7 @@ void* connection_handler(void* arg){
     if(buf[i]=='\0'){ //if end of string break
       break;
     }
-    fprintf(stdout, s"%c",buf[i]);
+    fprintf(stdout, "%c",buf[i]);
   }
   fprintf(stdout, "\n");
   //filling element
@@ -126,7 +127,7 @@ void* sender_routine(void* arg){
   rec_addr.sin_port           = htons(CLIENT_THREAD_RECEIVER_PORT);
   rec_addr.sin_addr.s_addr    = inet_addr(args->receiver_addr);
 
-  int ret, bytes_left, bytes_sent;
+  int ret, bytes_left, bytes_sent = 0;
 
   int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(ret, "Cannot create sender thread socket");
@@ -135,8 +136,10 @@ void* sender_routine(void* arg){
   ERROR_HELPER(ret, "Error trying to connect to client receicer thread");
 
   //sending test buffer
-  char buf[USERLIST_BUFF_SIZE] = {0};
-  buf[0] = "1\n";
+  char* buf= (char*)calloc(USERLIST_BUFF_SIZE, sizeof(char));
+  buf[0] = '1';
+  buf[1] = '\n';
+  bytes_left = 2;
 
   //sending #mod
   while (bytes_left > 0){
@@ -149,10 +152,13 @@ void* sender_routine(void* arg){
       bytes_left -= ret;
       bytes_sent += ret;
   }
-  buf = {0};
+  bzero(buf, USERLIST_BUFF_SIZE);
+
 
   //sendig username ecc.
   buf = "regibald_94\n127.0.0.1\na\n0\n";
+  bytes_left = strlen(buf);
+  bytes_sent = 0;
   while (bytes_left > 0){
       ret = send(socket_desc, buf + bytes_sent, bytes_left, 0);
       if (ret == -1 && errno == EINTR){
@@ -163,6 +169,7 @@ void* sender_routine(void* arg){
       bytes_left -= ret;
       bytes_sent += ret;
   }
+  bzero(buf, USERLIST_BUFF_SIZE);
 }
 
 int main(int argc, char const *argv[]) {
