@@ -38,11 +38,8 @@
 void* connection_handler(void* arg){
   thread_args_t* args = (thread_args_t*)arg;
 
-  int ret, recv_bytes;
-
-  //user list element, single slot receive buffer
-  char buf[16];
-  size_t buf_len = sizeof(buf);
+  int ret;
+  //int recv_bytes;
 
   /*//COMMAND BUFFERS
   char* quit_command = SERVER_QUIT;//quit command buffer
@@ -60,45 +57,19 @@ void* connection_handler(void* arg){
 
   fprintf(stderr, "flag 2\n");
 
-  int bytes_read = 0;
 
-  // messages longer than sizeof(buf) will not be read
-  while (bytes_read <= sizeof(buf)) {
-      ret = recv(args->socket, buf + bytes_read, 1, 0);
-
-      if (ret == -1 && errno == EINTR) continue;
-      ERROR_HELPER(ret, "Errore nella lettura da socket");
-
-      // controlling last byte read
-      if (buf[bytes_read] == '\n') break; // end of message
-
-      bytes_read++;
-  }
-
-
-  buf[bytes_read] = '\0'; //adding string terminator
-
-
-  //print test
-  for (size_t i = 0; i < 16 ; i++) {
-    if(buf[i]=='\0'){ //if end of string break
-      break;
-    }
-    fprintf(stdout, "%c",buf[i]);
-  }
-  fprintf(stdout, "\n");
   //filling element
   //create_user_list_element(element, thread_args.addr, args, buf);
 
 
-  fprintf(stderr, "message read\n");
+  //fprintf(stderr, "message read\n");
 
   /*TD:
     -list insertion
   */
 
   while(1){
-    //read message from client
+    /*//read message from client
     while ((recv_bytes = recv(args->socket, buf, buf_len, 0)) < 0) {
       if (errno == EINTR) continue;
       ERROR_HELPER(-1, "Cannot read from socket");
@@ -107,7 +78,7 @@ void* connection_handler(void* arg){
     // quit command check
     //if (recv_bytes == quit_command_len && !memcmp(buf, quit_command, quit_command_len)) break;
 
-    //TD: -other commands management
+    //TD: -other commands management*/
   }
 
   //CLOSE OPERATIONS (TO BE COMPLETED)
@@ -125,7 +96,7 @@ void* sender_routine(void* arg){
   struct sockaddr_in rec_addr = {0};
   rec_addr.sin_family         = AF_INET;
   rec_addr.sin_port           = htons(CLIENT_THREAD_RECEIVER_PORT);
-  rec_addr.sin_addr.s_addr    = inet_addr(args->receiver_addr);
+  rec_addr.sin_addr.s_addr    = inet_addr("127.0.0.1"); //args->receiver_addr
 
   int ret, bytes_left, bytes_sent = 0;
 
@@ -141,6 +112,7 @@ void* sender_routine(void* arg){
   buf[1] = '\n';
   bytes_left = 2;
 
+  fprintf(stdout, "prova\n");
   //sending #mod
   while (bytes_left > 0){
       ret = send(socket_desc, buf + bytes_sent, bytes_left, 0);
@@ -156,7 +128,7 @@ void* sender_routine(void* arg){
 
 
   //sendig username ecc.
-  buf = "regibald_94\n127.0.0.1\na\n0\n";
+  buf = "regibald_94-127.0.0.1-a-0-";
   bytes_left = strlen(buf);
   bytes_sent = 0;
   while (bytes_left > 0){
@@ -170,6 +142,7 @@ void* sender_routine(void* arg){
       bytes_sent += ret;
   }
   bzero(buf, USERLIST_BUFF_SIZE);
+  fprintf(stderr, "end sender routine\n");
 }
 
 int main(int argc, char const *argv[]) {
@@ -219,8 +192,42 @@ int main(int argc, char const *argv[]) {
       //client management thread
       // put arguments for the new thread into a buffer
       thread_args_t* thread_args = (thread_args_t*)malloc(sizeof(thread_args_t)); // cambiare, fare array di args
-      thread_args->socket         = client_desc;
-      thread_args->thread_id      = 0; //new_thread_id(),not written yet;
+      thread_args->socket           = client_desc;
+      thread_args->thread_id        = 0; //new_thread_id(),not written yet;
+      thread_args->client_user_name = (char*)malloc(17*sizeof(char));
+
+      //receiving username
+      int bytes_read = 0;
+      //user list element, single slot receive buffer
+      char buf[17] = {0};
+      size_t buf_len = sizeof(buf);
+
+      // messages longer than sizeof(buf) will not be read
+      while (bytes_read <= sizeof(buf)) {
+          ret = recv(client_desc, buf + bytes_read, 1, 0);
+
+          if (ret == -1 && errno == EINTR) continue;
+          ERROR_HELPER(ret, "Errore nella lettura da socket");
+
+          // controlling last byte read
+          if (buf[bytes_read] == '\n') break; // end of message
+
+          bytes_read++;
+      }
+
+      buf[bytes_read] = '\0'; //adding string terminator
+
+      //print test
+      for (size_t i = 0; i < 17 ; i++) {
+        if(buf[i]=='\0'){ //if end of string break
+          break;
+        }
+        fprintf(stdout, "%c",buf[i]);
+      }
+      fprintf(stdout, "\n");
+
+      //copying username into struct
+      memcpy(thread_args->client_user_name, &buf, bytes_read);
 
       char* client_ip_buf = inet_ntoa(client_addr->sin_addr); //parsing addr to simplified dotted form
       thread_args->addr   = (char*)malloc(sizeof(client_ip_buf));// memory allocation for dotted address
@@ -241,9 +248,12 @@ int main(int argc, char const *argv[]) {
 
 
       //new buffer for new incoming connection
-      client_addr = calloc(1, sizeof(struct sockaddr_in));
+      //client_addr = calloc(1, sizeof(struct sockaddr_in));
 
       ret = pthread_detach(thread_client);
+      PTHREAD_ERROR_HELPER(ret, "Could not detach thread");
+
+      ret = pthread_detach(thread_sender);
       PTHREAD_ERROR_HELPER(ret, "Could not detach thread");
     }
 

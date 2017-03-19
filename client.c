@@ -46,8 +46,8 @@ void* listen_thread_routine(void *args){
 void print_elem_list(const char* buf, int x){
   int j;
   fprintf(stdout, "Username[Element: %d]: ", x);
-  for(j=0; j<17; j++){
-    if(buf[j]=='\n'){ //if end of string break
+  for(j=0; j<40; j++){
+    if(buf[j]=='-'){ //if end of string break
       fprintf(stdout, "\n");
       break;
     }
@@ -55,26 +55,28 @@ void print_elem_list(const char* buf, int x){
   }
 
   fprintf(stdout, "IP[Element: %d]: ", x);
-  for(j=17; j<33; j++){
-    if(buf[j]=='\n'){ //if end of string break
+  for(j; j<40; j++){
+    if(buf[j]=='-'){ //if end of string break
       fprintf(stdout, "\n");
+      j++;
       break;
     }
     fprintf(stdout, "%c", buf[j]);
   }
 
   fprintf(stdout, "Availability[Element: %d]: ", x);
-  for(j=33; j<35; j++){
-    if(buf[j]=='\n'){ //if end of string break
+  for(j; j<40; j++){
+    if(buf[j]=='-'){ //if end of string break
       fprintf(stdout, "\n");
+      j++;
       break;
     }
     fprintf(stdout, "%c", buf[j]);
   }
 
   fprintf(stdout, "Position in user list[Element: %d]: ", x);
-  for(j=35; j<40; j++){
-    if(buf[j]=='\n'){ //if end of string break
+  for(j; j<40; j++){
+    if(buf[j]=='-'){ //if end of string break
       fprintf(stdout, "\n");
       break;
     }
@@ -92,7 +94,8 @@ void* usr_list_recv_thread_routine(void *args){
   receiver_thread_args_t* arg = (receiver_thread_args_t*)args;
 
   //address structure for user list sender thread
-  struct sockaddr_in* usrl_sender_address = calloc(1,sizeof(struct sockaddr_in));
+  struct sockaddr_in usrl_sender_address = {0};
+  socklen_t usrl_sender_address_len = sizeof(usrl_sender_address);
 
 
   //allocating address struct for incoming connection from server
@@ -100,7 +103,7 @@ void* usr_list_recv_thread_routine(void *args){
 
   //struct for thead user list receiver thread bind function
   struct sockaddr_in thread_addr = {0};
-  thread_addr.sin_addr.s_addr = INADDR_ANY;
+  thread_addr.sin_addr.s_addr = inet_addr(SERVER_IP);
   thread_addr.sin_family      = AF_INET;
   thread_addr.sin_port        = htons(CLIENT_THREAD_RECEIVER_PORT); // don't forget about network byte order!
 
@@ -113,22 +116,25 @@ void* usr_list_recv_thread_routine(void *args){
   ERROR_HELPER(ret, "Cannot listen on user list receiver thread socket");
 
   //accepting connection on user list receiver thread socket
-  ret = accept(arg->socket, (struct sockaddr*) usrl_sender_address, (socklen_t*) sizeof(struct sockaddr_in));
+  int rec_socket = accept(arg->socket, (struct sockaddr*) &usrl_sender_address, &usrl_sender_address_len); // SOCKET!!!!!!!!!!!
   ERROR_HELPER(ret, "Cannot accept connection on user list receiver thread socket");
 
   //number of future elemnts in buf
   int elem_buf_len = 0;
   char* buf = (char*)calloc(USERLIST_BUFF_SIZE,sizeof(char));
 
+  int bytes_read;
+
   //receiving user list element from server
-  while(1){
-    int bytes_read = 0;
+  //while(1){
+    bytes_read = 0;
     bzero(buf, USERLIST_BUFF_SIZE);
 
     //making sure to read all bytes of the message
+
     //number of modifications to receive
     while (bytes_read <= USERLIST_BUFF_SIZE) {
-        ret = recv(arg->socket, buf + bytes_read, 1, 0);
+        ret = recv(rec_socket, buf + bytes_read, 1, 0);
 
         if (ret == -1 && errno == EINTR) continue;
         ERROR_HELPER(ret, "Error while receiving number of modifications in user list from server");
@@ -141,17 +147,17 @@ void* usr_list_recv_thread_routine(void *args){
     buf[bytes_read] = '\0';
     elem_buf_len = bytes_read;
 
-    int num_modifiche = atoi(buf); //number of modifications
+    //int num_modifiche = atoi(buf); //number of modifications
 
     int i;
-    for(i =0; i<num_modifiche; i++){
+    for(i =0; i<1; i++){
       bzero(buf, USERLIST_BUFF_SIZE);
       bytes_read = 0;
       elem_buf_len = 0;
 
       //making sure to read all bytes of the message
       while (bytes_read <= USERLIST_BUFF_SIZE) {
-          ret = recv(arg->socket, buf + bytes_read, 1, 0);
+          ret = recv(rec_socket, buf + bytes_read, 1, 0);
 
           if (ret == -1 && errno == EINTR) continue;
           ERROR_HELPER(ret, "Error while receiving number of modifications in user list from server");
@@ -171,7 +177,7 @@ void* usr_list_recv_thread_routine(void *args){
     }// end of for loop
 
 
-  } //end of while(1)
+  //} //end of while(1)
 
 
 } //end of thread routine
