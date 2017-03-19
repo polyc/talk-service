@@ -8,6 +8,7 @@
 #include <string.h>
 #include <signal.h>
 #include <unistd.h>
+#include <strings.h>
 
 #include "client.h"
 #include "common.h"
@@ -50,7 +51,7 @@ void print_elem_list(const char* buf, int x){
       fprintf(stdout, "\n");
       break;
     }
-    ffprintf(stdout, "%c", buf[j]);
+    fprintf(stdout, "%c", buf[j]);
   }
 
   fprintf(stdout, "IP[Element: %d]: ", x);
@@ -59,7 +60,7 @@ void print_elem_list(const char* buf, int x){
       fprintf(stdout, "\n");
       break;
     }
-    ffprintf(stdout, "%c", buf[j]);
+    fprintf(stdout, "%c", buf[j]);
   }
 
   fprintf(stdout, "Availability[Element: %d]: ", x);
@@ -68,7 +69,7 @@ void print_elem_list(const char* buf, int x){
       fprintf(stdout, "\n");
       break;
     }
-    ffprintf(stdout, "%c", buf[j]);
+    fprintf(stdout, "%c", buf[j]);
   }
 
   fprintf(stdout, "Position in user list[Element: %d]: ", x);
@@ -77,7 +78,7 @@ void print_elem_list(const char* buf, int x){
       fprintf(stdout, "\n");
       break;
     }
-    ffprintf(stdout, "%c", buf[j]);
+    fprintf(stdout, "%c", buf[j]);
   }
 
 }
@@ -85,39 +86,49 @@ void print_elem_list(const char* buf, int x){
 
 void* usr_list_recv_thread_routine(void *args){
 
-  struct listen_thread_args_t* arg = args;
+  int ret;
 
   //getting arguments from args used for connection
-  int socket = arg.socket;
-  struct sockaddr_in* thread_addr = arg.addr;
+  receiver_thread_args_t* arg = (receiver_thread_args_t*)args;
+
+  //address structure for user list sender thread
+  struct sockaddr_in* usrl_sender_address = calloc(1,sizeof(struct sockaddr_in));
+
 
   //allocating address struct for incoming connection from server
-  struct sockaddr_in* server_addr = calloc(1, sizeof(sockaddr_in));
+  struct sockaddr_in* server_addr = calloc(1, sizeof(struct sockaddr_in));
+
+  //struct for thead user list receiver thread bind function
+  struct sockaddr_in thread_addr = {0};
+  thread_addr.sin_addr.s_addr = INADDR_ANY;
+  thread_addr.sin_family      = AF_INET;
+  thread_addr.sin_port        = htons(CLIENT_THREAD_RECEIVER_PORT); // don't forget about network byte order!
 
   //binding user list receiver thread address to user list receiver thread socket
-  ret = bind(socket, (const struct sockaddr*)&thread_addr, sizeof(struct sockaddr_in));
+  ret = bind(arg->socket, (const struct sockaddr*)&thread_addr, sizeof(struct sockaddr_in));
   ERROR_HELPER(ret, "Error while binding address to user list receiver thread socket");
 
   //user list receiver thread listening for incoming connections
-  ret = listen(socket, 1);
+  ret = listen(arg->socket, 1);
   ERROR_HELPER(ret, "Cannot listen on user list receiver thread socket");
 
   //accepting connection on user list receiver thread socket
-  ret = accept(socket, (struct sockaddr*) server_addr, (socklen_t*) sizeof(sockaddr_in));
+  ret = accept(arg->socket, (struct sockaddr*) usrl_sender_address, (socklen_t*) sizeof(struct sockaddr_in));
   ERROR_HELPER(ret, "Cannot accept connection on user list receiver thread socket");
 
   //number of future elemnts in buf
   int elem_buf_len = 0;
-  char* buf[USERLIST_BUFF_SIZE];
+  char* buf = (char*)calloc(USERLIST_BUFF_SIZE,sizeof(char));
+
   //receiving user list element from server
   while(1){
     int bytes_read = 0;
-    buf = {0};
+    bzero(buf, USERLIST_BUFF_SIZE);
 
     //making sure to read all bytes of the message
     //number of modifications to receive
     while (bytes_read <= USERLIST_BUFF_SIZE) {
-        ret = recv(socket, buf + bytes_read, 1, 0);
+        ret = recv(arg->socket, buf + bytes_read, 1, 0);
 
         if (ret == -1 && errno == EINTR) continue;
         ERROR_HELPER(ret, "Error while receiving number of modifications in user list from server");
@@ -134,13 +145,13 @@ void* usr_list_recv_thread_routine(void *args){
 
     int i;
     for(i =0; i<num_modifiche; i++){
-      buf = {0};
+      bzero(buf, USERLIST_BUFF_SIZE);
       bytes_read = 0;
       elem_buf_len = 0;
 
       //making sure to read all bytes of the message
       while (bytes_read <= USERLIST_BUFF_SIZE) {
-          ret = recv(socket, buf + bytes_read, 1, 0);
+          ret = recv(arg->socket, buf + bytes_read, 1, 0);
 
           if (ret == -1 && errno == EINTR) continue;
           ERROR_HELPER(ret, "Error while receiving number of modifications in user list from server");
@@ -202,10 +213,6 @@ int main(int argc, char* argv[]){
   int usrl_recv_socket = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(usrl_recv_socket, "Error while creating user list receiver thread socket descriptor");
 
-  //address structure for user list receiver thread socket
-  struct sockaddr_in usrl_sender_address = {0};
-  usrl_sender_address.sin_family         = AF_INET;
-  usrl_sender_address.sin_port           = htons(CLIENT_THREAD_RECEIVER_PORT);
 
 
 /*
@@ -232,13 +239,12 @@ int main(int argc, char* argv[]){
   //user list receiver thread
   //
   //creating parameters for user list receiver thread funtion
-  listen_thread_args_t* usrl_recv_args = (listen_thread_args_t*)malloc(sizeof(listen_thread_args_t));
-  t_listen_args.socket = usrl_recv_socket;
-  t_listen_args.addr   = usrl_sender_address;
+  receiver_thread_args_t* usrl_recv_args = (receiver_thread_args_t*)malloc(sizeof(receiver_thread_args_t));
+  usrl_recv_args->socket = usrl_recv_socket;
 
   //creating and spawning user list receiver thread with parameters
   pthread_t thread_usrl_recv;
-  ret = pthread_create(&thread_usrl_recv, NULL, usr_list_recv_thread_routine, &usrl_recv_args);
+  ret = pthread_create(&thread_usrl_recv, NULL, usr_list_recv_thread_routine, (void*)usrl_recv_args);
   PTHREAD_ERROR_HELPER(ret, "Unable to create user list receiver thread");
 
   //detatching from user list receiver thread
