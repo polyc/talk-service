@@ -5,7 +5,7 @@
 #define SERVER_IP "127.0.0.1" //add IP address of the server
 #define CLIENT_THREAD_LISTEN_PORT 1025
 #define CLIENT_THREAD_RECEIVER_PORT 1026
-#define USERLIST_BUFF_SIZE 50
+#define USERLIST_BUFF_SIZE 40
 
 #define AVAILABLE   'a'
 #define UNAVAILABLE 'u'

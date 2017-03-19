@@ -11,14 +11,8 @@
 
 #include "client.h"
 #include "common.h"
+
 /*
-
-//function to process user list element and adding it to user list
-void userList_handle(char* elem, int len){
-
-
-}
-
 
 //thread listen routine
 void* listen_thread_routine(void *args){
@@ -46,6 +40,48 @@ void* listen_thread_routine(void *args){
 
 
 }
+*/
+
+void print_elem_list(const char* buf, int x){
+  int j;
+  fprintf(stdout, "Username[Element: %d]: ", x);
+  for(j=0; j<17; j++){
+    if(buf[j]=='\n'){ //if end of string break
+      fprintf(stdout, "\n");
+      break;
+    }
+    ffprintf(stdout, "%c", buf[j]);
+  }
+
+  fprintf(stdout, "IP[Element: %d]: ", x);
+  for(j=17; j<33; j++){
+    if(buf[j]=='\n'){ //if end of string break
+      fprintf(stdout, "\n");
+      break;
+    }
+    ffprintf(stdout, "%c", buf[j]);
+  }
+
+  fprintf(stdout, "Availability[Element: %d]: ", x);
+  for(j=33; j<35; j++){
+    if(buf[j]=='\n'){ //if end of string break
+      fprintf(stdout, "\n");
+      break;
+    }
+    ffprintf(stdout, "%c", buf[j]);
+  }
+
+  fprintf(stdout, "Position in user list[Element: %d]: ", x);
+  for(j=35; j<40; j++){
+    if(buf[j]=='\n'){ //if end of string break
+      fprintf(stdout, "\n");
+      break;
+    }
+    ffprintf(stdout, "%c", buf[j]);
+  }
+
+}
+
 
 void* usr_list_recv_thread_routine(void *args){
 
@@ -70,21 +106,21 @@ void* usr_list_recv_thread_routine(void *args){
   ret = accept(socket, (struct sockaddr*) server_addr, (socklen_t*) sizeof(sockaddr_in));
   ERROR_HELPER(ret, "Cannot accept connection on user list receiver thread socket");
 
-  //allocating buffer to write user list element
-  char* buffer_elem[USERLIST_BUFF_SIZE];
+  //number of future elemnts in buf
   int elem_buf_len = 0;
-
+  char* buf[USERLIST_BUFF_SIZE];
   //receiving user list element from server
   while(1){
     int bytes_read = 0;
-    char* buf[USERLIST_BUFF_SIZE];
+    buf = {0};
 
     //making sure to read all bytes of the message
+    //number of modifications to receive
     while (bytes_read <= USERLIST_BUFF_SIZE) {
         ret = recv(socket, buf + bytes_read, 1, 0);
 
         if (ret == -1 && errno == EINTR) continue;
-        ERROR_HELPER(ret, "Error while receiving user element from server");
+        ERROR_HELPER(ret, "Error while receiving number of modifications in user list from server");
 
         if (buf[bytes_read] == '\n') break; // end of message
 
@@ -94,14 +130,41 @@ void* usr_list_recv_thread_routine(void *args){
     buf[bytes_read] = '\0';
     elem_buf_len = bytes_read;
 
-    //processing user list element with userList_handle function
-    userList_handle(buf, elem_buf_len);
-  }
+    int num_modifiche = atoi(buf); //number of modifications
+
+    int i;
+    for(i =0; i<num_modifiche; i++){
+      buf = {0};
+      bytes_read = 0;
+      elem_buf_len = 0;
+
+      //making sure to read all bytes of the message
+      while (bytes_read <= USERLIST_BUFF_SIZE) {
+          ret = recv(socket, buf + bytes_read, 1, 0);
+
+          if (ret == -1 && errno == EINTR) continue;
+          ERROR_HELPER(ret, "Error while receiving number of modifications in user list from server");
+
+          if (buf[bytes_read] == '\n') break; // end of message
+
+          bytes_read++;
+      }
+
+      //buf[bytes_read] = '\0';
+      elem_buf_len = bytes_read;
+
+      //print elements sent from server (only for test)
+      //send elements to function user list element handler
+      print_elem_list(buf, i);
+
+    }// end of for loop
 
 
-}
+  } //end of while(1)
 
-*/
+
+} //end of thread routine
+
 
 int main(int argc, char* argv[]){
 
@@ -124,19 +187,20 @@ int main(int argc, char* argv[]){
 
   fprintf(stderr, "flag 1\n");
 
-
+/*
   //socket descriptor for listen thread
   int socket_listen_thread_desc = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(socket_listen_thread_desc, "Error while creating client listen socket descriptor");
-
-  //socket descriptor for user list receiver thread
-  int usrl_recv_socket = socket(AF_INET, SOCK_STREAM, 0);
-  ERROR_HELPER(usrl_recv_socket, "Error while creating user list receiver thread socket descriptor");
 
   //address structure for listen thread socket
   struct sockaddr_in incoming_client_addr = {0};
   serv_addr.sin_family              = AF_INET;
   serv_addr.sin_port                = htons(CLIENT_THREAD_LISTEN_PORT);
+*/
+
+  //socket descriptor for user list receiver thread
+  int usrl_recv_socket = socket(AF_INET, SOCK_STREAM, 0);
+  ERROR_HELPER(usrl_recv_socket, "Error while creating user list receiver thread socket descriptor");
 
   //address structure for user list receiver thread socket
   struct sockaddr_in usrl_sender_address = {0};
@@ -144,7 +208,7 @@ int main(int argc, char* argv[]){
   usrl_sender_address.sin_port           = htons(CLIENT_THREAD_RECEIVER_PORT);
 
 
-
+/*
   //thread listen
   //
   //creating parameters for listen thread funtion
@@ -162,6 +226,7 @@ int main(int argc, char* argv[]){
   PTHREAD_ERROR_HELPER(ret, "Unable to detatch from listen_thread");
   //
   //detached from thread listen
+*/
 
 
   //user list receiver thread
@@ -221,6 +286,7 @@ int main(int argc, char* argv[]){
   ret = close(socket_desc);
   ERROR_HELPER(ret, "Cannot close socket");
 
+  while(1){} //so that the client doesnt close the connection with the server
 
   exit(EXIT_SUCCESS);
 
