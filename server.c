@@ -161,9 +161,8 @@ void* sender_routine(void* arg){
   fprintf(stderr, "flag 18\n");
 
   //free(buf);
-  //fprintf(stdout, "end sender routine\n");
+  fprintf(stdout, "end sender routine\n");
   pthread_exit(NULL);
-
 }
 
 int main(int argc, char const *argv[]) {
