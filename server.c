@@ -212,7 +212,7 @@ int main(int argc, char const *argv[]) {
 
       //client management thread
       // put arguments for the new thread into a buffer
-      thread_args_t* thread_args = (thread_args_t*)malloc(sizeof(thread_args_t)); // cambiare, fare array di args
+      thread_args_t* thread_args = (thread_args_t*)malloc(sizeof(thread_args_t));
       thread_args->socket           = client_desc;
       thread_args->thread_id        = 0; //new_thread_id(),not written yet;
       thread_args->client_user_name = (char*)malloc(17*sizeof(char));
@@ -282,7 +282,7 @@ int main(int argc, char const *argv[]) {
       fprintf(stderr, "flag9");
 
       //new buffer for new incoming connection
-      //client_addr = calloc(1, sizeof(struct sockaddr_in));
+      client_addr = calloc(1, sizeof(struct sockaddr_in));
 
       ret = pthread_detach(thread_sender);
       PTHREAD_ERROR_HELPER(ret, "Could not detach thread");
