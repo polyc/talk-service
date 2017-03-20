@@ -86,7 +86,7 @@ void* connection_handler(void* arg){
   ret = close(args->socket);//close client_desc
   ERROR_HELPER(ret, "Cannot close socket for incoming connection");
 
-  free(args->addr);
+  free(args->addr); //free of client_addr
   free(args);
   pthread_exit(NULL);
 }
@@ -229,6 +229,7 @@ int main(int argc, char const *argv[]) {
       thread_args->socket           = client_desc;
       thread_args->thread_id        = 0; //new_thread_id(),not written yet;
       thread_args->client_user_name = (char*)malloc(17*sizeof(char));
+      thread_args->addr             = client_addr;
 
       //receiving username
       int bytes_read = 0;
@@ -267,8 +268,6 @@ int main(int argc, char const *argv[]) {
       fprintf(stderr, "flag5");
 
       char* client_ip_buf = inet_ntoa(client_addr->sin_addr); //parsing addr to simplified dotted form
-      thread_args->addr   = (char*)malloc(sizeof(client_ip_buf));// memory allocation for dotted address
-      memcpy(thread_args->addr, client_ip_buf, sizeof(*(client_ip_buf))); //copying dotted address into struct
 
       fprintf(stderr, "flag6");
 
@@ -282,6 +281,7 @@ int main(int argc, char const *argv[]) {
       fprintf(stderr, "flag7");
 
       //sender thread
+
       sender_thread_args_t* sender_args = (sender_thread_args_t*)malloc(sizeof(sender_thread_args_t));
       sender_args->receiver_addr = (char*)malloc(sizeof(client_ip_buf));
       memcpy(sender_args->receiver_addr, client_ip_buf, sizeof(*(client_ip_buf)));
