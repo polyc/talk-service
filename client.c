@@ -150,10 +150,6 @@ void* usr_list_recv_thread_routine(void *args){
 
   fprintf(stderr, "flag 4.5\n");
 
-  int reuseaddr_opt = 1;
-  ret = setsockopt(arg->socket, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_opt, sizeof(reuseaddr_opt));
-  ERROR_HELPER(ret, "Cannot set SO_REUSEADDR option");
-
   //binding user list receiver thread address to user list receiver thread socket
   ret = bind(arg->socket, (const struct sockaddr*)&thread_addr, sizeof(struct sockaddr_in));
   ERROR_HELPER(ret, "Error while binding address to user list receiver thread socket");
@@ -167,7 +163,7 @@ void* usr_list_recv_thread_routine(void *args){
   fprintf(stderr, "flag 5\n");
 
   //accepting connection on user list receiver thread socket
-  int rec_socket = accept(arg->socket, (struct sockaddr*) &usrl_sender_address, &usrl_sender_address_len); // SOCKET!!!!!!!!!!!
+  int rec_socket = accept(arg->socket, (struct sockaddr*) &usrl_sender_address, &usrl_sender_address_len);
   ERROR_HELPER(ret, "Cannot accept connection on user list receiver thread socket");
 
   fprintf(stderr, "flag 6\n");
@@ -296,7 +292,7 @@ int main(int argc, char* argv[]){
   ret = pthread_create(&thread_usrl_recv, NULL, usr_list_recv_thread_routine, (void*)usrl_recv_args);
   PTHREAD_ERROR_HELPER(ret, "Unable to create user list receiver thread");
 
-
+  //wait LISTEN in thread_usrl_rcv!!!!! then go
   //connection to server
   ret = connect(socket_desc, (struct sockaddr*) &serv_addr, sizeof(struct sockaddr_in));
   ERROR_HELPER(ret, "Error trying to connect to server");
