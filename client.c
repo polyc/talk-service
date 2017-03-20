@@ -43,6 +43,46 @@ void* listen_thread_routine(void *args){
 }
 */
 
+void send_msg(int socket, char *buf) {
+    int ret;
+
+    int bytes_left = strlen(buf); //bruscolini al posto di pere ahahaha
+    int bytes_sent = 0;
+
+    while (bytes_left > 0) {
+        ret = send(socket, buf + bytes_sent, bytes_left, 0);
+
+        if (ret == -1 && errno == EINTR) continue;
+        ERROR_HELPER(ret, "Errore nella scrittura su socket");
+
+        bytes_left -= ret;
+        bytes_sent += ret;
+    }
+}
+
+
+int recv_msg(int socket, char *buf, size_t buf_len) {
+    int ret;
+    int bytes_read = 0;
+
+    // messages longer that buf_len wont be read all
+    while (bytes_read <= buf_len) {
+        ret = recv(socket, buf + bytes_read, 1, 0);
+
+        if (ret == 0) return -1; // client closed the socket
+        if (ret == -1 && errno == EINTR) continue;
+        ERROR_HELPER(ret, "Errore nella lettura da socket");
+
+        // controlling last bye read
+        if (buf[bytes_read] == '\n') break; //end of message
+
+        bytes_read++;
+    }
+
+    buf[bytes_read] = '\0'; //adding string terminator
+    return 0;
+}
+
 void print_elem_list(const char* buf, int x){
   int j;
 
@@ -139,6 +179,12 @@ void* usr_list_recv_thread_routine(void *args){
     //making sure to read all bytes of the message
 
     //number of modifications to receive
+    ret = recv_msg(rec_socket, buf, USERLIST_BUFF_SIZE);
+    if(ret != 0){
+      fprintf(stderr, "Error while receiving number of modifications from server");
+    }
+
+/*
     while (bytes_read <= USERLIST_BUFF_SIZE) {
         ret = recv(rec_socket, buf + bytes_read, 1, 0);
 
@@ -154,14 +200,22 @@ void* usr_list_recv_thread_routine(void *args){
 
     buf[bytes_read] = '\0';
     elem_buf_len = bytes_read;
+*/
 
-    //int num_modifiche = atoi(buf); //number of modifications
+    int num_modifiche = atoi(buf); //number of modifications
 
     fprintf(stderr, "flag 8\n");
 
     int i;
-    for(i =0; i<1; i++){
+    for(i =0; i<num_modifiche; i++){
       bzero(buf, USERLIST_BUFF_SIZE);
+
+      //receiveing user list element i from server
+      ret = recv_msg(rec_socket, buf, USERLIST_BUFF_SIZE);
+      if(ret != 0){
+        fprintf(stderr, "Error while receiving  user list element[%d] from server", i);
+      }
+/*
       bytes_read = 0;
       elem_buf_len = 0;
 
@@ -183,7 +237,7 @@ void* usr_list_recv_thread_routine(void *args){
 
       //buf[bytes_read] = '\0';
       elem_buf_len = bytes_read;
-
+*/
       //print elements sent from server (only for test)
       //send elements to function user list element handler
       print_elem_list(buf, i);
@@ -205,6 +259,7 @@ int main(int argc, char* argv[]){
 
   //getting username from argv
   char* username = argv[1];
+  //forse da eliminare visto che ci stavano due send
   strcat(username, "\n"); //concatenating "\n" for server recv function
 
   //socket descriptor to connect to server
@@ -279,12 +334,16 @@ int main(int argc, char* argv[]){
 
   //sending buffer init data for user list
   //creating buffer for username and availability flag
-  char username_buf[17];
+  char* username_buf = (char*)malloc(17*sizeof(char));
   strncpy(username_buf, username, strlen(username));
 
   //sending username to server
-  ret = send(socket_desc, username_buf, strlen(username), 0);
+  //ret = send(socket_desc, username_buf, strlen(username), 0);  //elminare cazzo ce fa qui
 
+  send_msg(socket_desc, username_buf);
+
+
+/*
   //making sure all bytes have been sent
   int bytes_left = strlen(username);
   int bytes_sent = 0;
@@ -302,7 +361,7 @@ int main(int argc, char* argv[]){
       bytes_left -= ret;
       bytes_sent += ret;
   }
-
+*/
   fprintf(stderr, "flag 4\n");
 
   //detatching from user list receiver thread
