@@ -301,7 +301,7 @@ int main(int argc, char* argv[]){
 
   //sending buffer init data for user list
   //creating buffer for username and availability flag
-  char* username_buf = (char*)malloc(17*sizeof(char));
+  char* username_buf = (char*)malloc(USRNAME_BUF_SIZE*sizeof(char));
   strncpy(username_buf, username, strlen(username));
 
   //sending username to server
