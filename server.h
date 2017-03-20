@@ -16,5 +16,5 @@ typedef struct sender_thread_args_s{
 //void create_user_list_element(usr_list_elem_t* element, char* ip, thread_args_t* args, char* buf);
 
 void* connection_handler(void* arg);
-
+int recv_msg(int socket, char *buf, size_t buf_len);
 void* sender_routine(void* arg);

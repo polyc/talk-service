@@ -34,6 +34,28 @@
   return;
 }*/
 
+int recv_msg(int socket, char *buf, size_t buf_len) {
+    int ret;
+    int bytes_read = 0;
+
+    // messages longer that buf_len wont be read all
+    while (bytes_read <= buf_len) {
+        ret = recv(socket, buf + bytes_read, 1, 0);
+
+        if (ret == 0) return -1; // client closed the socket
+        if (ret == -1 && errno == EINTR) continue;
+        ERROR_HELPER(ret, "Errore nella lettura da socket");
+
+        // controlling last bye read
+        if (buf[bytes_read] == '\n') break; //end of message
+
+        bytes_read++;
+    }
+
+    buf[bytes_read] = '\0'; //adding string terminator
+    return 0;
+}
+
 //client-process/server-thread communication routine
 void* connection_handler(void* arg){
 
@@ -119,7 +141,7 @@ void* sender_routine(void* arg){
   ERROR_HELPER(ret, "Cannot create sender thread socket");
 
   ret = connect(socket_desc, (struct sockaddr*) &rec_addr, sizeof(struct sockaddr_in));
-  ERROR_HELPER(ret, "Error trying to connect to client receicer thread");
+  ERROR_HELPER(ret, "Error trying to connect to client receiver thread");
 
   fprintf(stderr, "flag 13\n");
 
@@ -232,28 +254,11 @@ int main(int argc, char const *argv[]) {
       thread_args->addr             = client_addr;
 
       //receiving username
-      int bytes_read = 0;
-      //user list element, single slot receive buffer
-      char buf[17] = {0};
-      size_t buf_len = sizeof(buf);
-
-      // messages longer than sizeof(buf) will not be read
-      while (bytes_read <= sizeof(buf)) {
-          ret = recv(client_desc, buf + bytes_read, 1, 0);
-
-          if (ret == -1 && errno == EINTR) continue;
-          ERROR_HELPER(ret, "Errore nella lettura da socket");
-
-          // controlling last byte read
-          if (buf[bytes_read] == '\n') break; // end of message
-
-          bytes_read++;
-      }
-
-      buf[bytes_read] = '\0'; //adding string terminator
+      char* buf = (char*)calloc(USRNAME_BUF_SIZE, sizeof(char));
+      ret = recv_msg(client_desc , buf, USRNAME_BUF_SIZE);
 
       //print test
-      for (size_t i = 0; i < 17 ; i++) {
+      for (size_t i = 0; i < USRNAME_BUF_SIZE ; i++) {
         if(buf[i]=='\0'){ //if end of string break
           break;
         }
@@ -263,7 +268,7 @@ int main(int argc, char const *argv[]) {
 
       fprintf(stderr, "flag4");
       //copying username into struct
-      memcpy(thread_args->client_user_name, &buf, bytes_read);
+      memcpy(thread_args->client_user_name, buf, ret);
 
       fprintf(stderr, "flag5");
 
