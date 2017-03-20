@@ -5,7 +5,7 @@
 typedef struct thread_args_s{
   int socket;
   unsigned int thread_id;
-  char* addr; //dotted form
+  struct sockaddr_in* addr;
   char* client_user_name;
 } thread_args_t;
 
