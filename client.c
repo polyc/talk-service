@@ -60,7 +60,6 @@ void send_msg(int socket, char *buf) {
     }
 }
 
-
 int recv_msg(int socket, char *buf, size_t buf_len) {
     int ret;
     int bytes_read = 0;
@@ -136,7 +135,7 @@ void* usr_list_recv_thread_routine(void *args){
   receiver_thread_args_t* arg = (receiver_thread_args_t*)args;
 
   //address structure for user list sender thread
-  struct sockaddr_in usrl_sender_address = {0};
+  struct sockaddr_in* usrl_sender_address = calloc(1, sizeof(struct sockaddr_in));
   socklen_t usrl_sender_address_len = sizeof(usrl_sender_address);
 
 
@@ -150,6 +149,10 @@ void* usr_list_recv_thread_routine(void *args){
   thread_addr.sin_port        = htons(CLIENT_THREAD_RECEIVER_PORT); // don't forget about network byte order!
 
   fprintf(stderr, "flag 4.5\n");
+
+  int reuseaddr_opt = 1;
+  ret = setsockopt(arg->socket, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_opt, sizeof(reuseaddr_opt));
+  ERROR_HELPER(ret, "Cannot set SO_REUSEADDR option");
 
   //binding user list receiver thread address to user list receiver thread socket
   ret = bind(arg->socket, (const struct sockaddr*)&thread_addr, sizeof(struct sockaddr_in));
@@ -173,11 +176,9 @@ void* usr_list_recv_thread_routine(void *args){
   int elem_buf_len = 0;
   char* buf = (char*)calloc(USERLIST_BUFF_SIZE,sizeof(char));
 
-  int bytes_read;
 
   //receiving user list element from server
   //while(1){
-    bytes_read = 0;
     bzero(buf, USERLIST_BUFF_SIZE);
 
     //making sure to read all bytes of the message
@@ -188,23 +189,6 @@ void* usr_list_recv_thread_routine(void *args){
       fprintf(stderr, "Error while receiving number of modifications from server");
     }
 
-/*
-    while (bytes_read <= USERLIST_BUFF_SIZE) {
-        ret = recv(rec_socket, buf + bytes_read, 1, 0);
-
-        fprintf(stderr, "flag 7");
-
-        if (ret == -1 && errno == EINTR) continue;
-        ERROR_HELPER(ret, "Error while receiving number of modifications in user list from server");
-
-        if (buf[bytes_read] == '\n') break; // end of message
-
-        bytes_read++;
-    }
-
-    buf[bytes_read] = '\0';
-    elem_buf_len = bytes_read;
-*/
 
     int num_modifiche = atoi(buf); //number of modifications
 
@@ -219,29 +203,7 @@ void* usr_list_recv_thread_routine(void *args){
       if(ret != 0){
         fprintf(stderr, "Error while receiving  user list element[%d] from server", i);
       }
-/*
-      bytes_read = 0;
-      elem_buf_len = 0;
 
-      //making sure to read all bytes of the message
-      while (bytes_read <= USERLIST_BUFF_SIZE) {
-          ret = recv(rec_socket, buf + bytes_read, 1, 0);
-
-          fprintf(stderr, "flag 9\n");
-
-          if (ret == -1 && errno == EINTR) continue;
-          ERROR_HELPER(ret, "Error while receiving number of modifications in user list from server");
-
-          if (buf[bytes_read] == '\n') break; // end of message
-
-          bytes_read++;
-      }
-
-      fprintf(stderr, "flag 10\n");
-
-      //buf[bytes_read] = '\0';
-      elem_buf_len = bytes_read;
-*/
       //print elements sent from server (only for test)
       //send elements to function user list element handler
       print_elem_list(buf, i);
@@ -251,6 +213,12 @@ void* usr_list_recv_thread_routine(void *args){
     fprintf(stderr, "flag 11\n");
 
   //} //end of while(1)
+
+  ret = close(rec_socket);
+  ERROR_HELPER(ret, "Cannot close socket");
+
+  free(buf);
+
   pthread_exit(NULL);
 
 } //end of thread routine
@@ -335,50 +303,30 @@ int main(int argc, char* argv[]){
 
   fprintf(stderr, "flag 2\n");
 
-
-
   //sending buffer init data for user list
   //creating buffer for username and availability flag
   char* username_buf = (char*)malloc(17*sizeof(char));
   strncpy(username_buf, username, strlen(username));
 
   //sending username to server
-  //ret = send(socket_desc, username_buf, strlen(username), 0);  //elminare cazzo ce fa qui
-
   send_msg(socket_desc, username_buf);
 
 
-/*
-  //making sure all bytes have been sent
-  int bytes_left = strlen(username);
-  int bytes_sent = 0;
-
-  fprintf(stderr, "flag 3\n");
-
-  while (bytes_left > 0){
-      ret = send(socket_desc, username_buf + bytes_sent, bytes_left, 0);
-
-      if (ret == -1 && errno == EINTR){
-        continue;
-      }
-      ERROR_HELPER(ret, "Error while sending username to server");
-
-      bytes_left -= ret;
-      bytes_sent += ret;
-  }
-*/
-  fprintf(stderr, "flag 4\n");
-
   //detatching from user list receiver thread
-  ret = pthread_join(thread_usrl_recv, NULL);
+  ret = pthread_join(thread_usrl_recv, NULL); //should be detatch but its only for test
   PTHREAD_ERROR_HELPER(ret, "Unable to detatch from user list receiver thread");
   //
   //detached from user list receiver thread
 
+
+  fprintf(stderr, "flag 4\n");
+
   // close socket
   ret = close(socket_desc);
-  ERROR_HELPER(ret, "Cannot close socket");
+  ERROR_HELPER(ret, "Cannot close socket_desc");
 
+  ret = close(usrl_recv_socket);
+  ERROR_HELPER(ret, "Cannot close usrl_recv_socket");
 
   exit(EXIT_SUCCESS);
 

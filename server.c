@@ -36,6 +36,7 @@
 
 //client-process/server-thread communication routine
 void* connection_handler(void* arg){
+
   thread_args_t* args = (thread_args_t*)arg;
 
   int ret;
@@ -94,6 +95,16 @@ void* sender_routine(void* arg){
   sender_thread_args_t* args = (sender_thread_args_t*)arg;
 
   fprintf(stderr, "flag 11\n");
+
+  //testing if passing correct ip addres to sender routine
+  //printing args->receiver_addr
+  char* x = args->receiver_addr;
+  for(int c = 0; c<strlen(x); c++){
+    fprintf(stdout, "%c", x[c]);
+  }
+  fprintf(stdout, "\n");
+  //
+  //
 
   struct sockaddr_in rec_addr = {0};
   rec_addr.sin_family         = AF_INET;
@@ -159,6 +170,9 @@ void* sender_routine(void* arg){
   }
 
   fprintf(stderr, "flag 18\n");
+
+  ret = close(socket_desc);
+  ERROR_HELPER(ret, "Error closing socket_desc in sender routine");
 
   //free(buf);
   fprintf(stdout, "end sender routine\n");

@@ -8,3 +8,5 @@ void* usr_list_recv_thread_routine(void *args);
 void* listen_thread_routine(void *args);
 void userList_handle(char* elem, int len);
 void print_elem_list(const char* buf, int x);
+void send_msg(int socket, char *buf);
+int recv_msg(int socket, char *buf, size_t buf_len);
