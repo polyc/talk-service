@@ -18,3 +18,4 @@ typedef struct sender_thread_args_s{
 void* connection_handler(void* arg);
 int recv_msg(int socket, char *buf, size_t buf_len);
 void* sender_routine(void* arg);
+GHashTable* usr_list_init();
