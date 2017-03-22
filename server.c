@@ -9,6 +9,7 @@
 #include <strings.h>
 #include <signal.h>
 #include <unistd.h>
+#include <glib.h>
 
 #include "server.h"
 #include "common.h"
