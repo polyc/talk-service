@@ -124,16 +124,6 @@ void* sender_routine(void* arg){
 
   fprintf(stderr, "flag 11\n");
 
-  //testing if passing correct ip addres to sender routine
-  //printing args->receiver_addr
-  char* x = args->receiver_addr;
-  for(int c = 0; c<strlen(x); c++){
-    fprintf(stdout, "%c", x[c]);
-  }
-  fprintf(stdout, "\n");
-  //
-  //
-
   struct sockaddr_in rec_addr = {0};
   rec_addr.sin_family         = AF_INET;
   rec_addr.sin_port           = htons(CLIENT_THREAD_RECEIVER_PORT);
