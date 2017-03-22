@@ -14,29 +14,13 @@
 #include "server.h"
 #include "common.h"
 
-/*void create_user_list_element(usr_list_elem_t* element, char* ip, thread_args_t* args, char* buf){
-  element->client_ip = ip; //dotted form
-  element->a_flag    = AVAILABLE;
-
-  //receiving username
-  while ((recv_bytes = recv(args->socket, buf, sizeof(buf), 0)) < 0) {
-    if (errno == EINTR) continue;
-    ERROR_HELPER(-1, "Cannot read from socket");
-  }
-  //print test
-  for (size_t i = 0; i < sizeof(buf) ; i++) {
-    printf(buf[i]);
-  }
-  printf("\n");
-
-  //filling elemnt.user_name
-  element.user_name = buf;
-
-  return;
-}*/
-
 GHashTable* usr_list_init(){
   GHashTable* list = g_hash_table_new(g_str_hash, g_str_equal);
+  return list;
+}
+
+GHashTable* thread_ref_init(){
+  GHashTable* list = g_hash_table_new(g_int_hash, g_int_equal);
   return list;
 }
 
@@ -198,7 +182,10 @@ void* sender_routine(void* arg){
 }
 
 int main(int argc, char const *argv[]) {
-  int ret, server_desc, client_desc;
+  int ret, server_desc, client_desc, thread_count = 0;
+
+  //generating thread data structure
+  GHashTable* thread_ref = thread_ref_init();
 
   //generating server userlist
   GHashTable* user_list = usr_list_init();
@@ -246,7 +233,8 @@ int main(int argc, char const *argv[]) {
       // put arguments for the new thread into a buffer
       thread_args_t* thread_args = (thread_args_t*)malloc(sizeof(thread_args_t));
       thread_args->socket           = client_desc;
-      thread_args->thread_id        = 0; //new_thread_id(),not written yet;
+      thread_args->thread_id        = thread_count; //unique thread id
+      thread_args->user_list        = user_list; //reference to seerver userlist
       thread_args->client_user_name = (char*)malloc(17*sizeof(char));
       thread_args->addr             = client_addr;
 
@@ -298,6 +286,8 @@ int main(int argc, char const *argv[]) {
 
       //new buffer for new incoming connection
       client_addr = calloc(1, sizeof(struct sockaddr_in));
+      //incrementing progressive number of threads
+      thread_count++;
 
       ret = pthread_detach(thread_sender);
       PTHREAD_ERROR_HELPER(ret, "Could not detach thread");
