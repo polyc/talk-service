@@ -257,6 +257,7 @@ int main(int argc, char const *argv[]) {
       //receiving username
       char* buf = (char*)calloc(USRNAME_BUF_SIZE, sizeof(char));
       ret = recv_msg(client_desc , buf, USRNAME_BUF_SIZE);
+      ERROR_HELPER(ret, "client closed the socket");
 
       //print test
       for (size_t i = 0; i < USRNAME_BUF_SIZE ; i++) {
@@ -270,6 +271,7 @@ int main(int argc, char const *argv[]) {
       fprintf(stderr, "flag4");
       //copying username into struct
       memcpy(thread_args->client_user_name, buf, ret);
+      free(buf);//free of username buffer
 
       fprintf(stderr, "flag5");
 
