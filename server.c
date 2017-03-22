@@ -137,7 +137,7 @@ void* sender_routine(void* arg){
   struct sockaddr_in rec_addr = {0};
   rec_addr.sin_family         = AF_INET;
   rec_addr.sin_port           = htons(CLIENT_THREAD_RECEIVER_PORT);
-  rec_addr.sin_addr.s_addr    = inet_addr("127.0.0.1"); //args->receiver_addr
+  rec_addr.sin_addr.s_addr    = inet_addr(LOCAL_IP);
 
   fprintf(stderr, "flag 12\n");
 
@@ -292,13 +292,11 @@ int main(int argc, char const *argv[]) {
       ret = pthread_detach(thread_client);
       PTHREAD_ERROR_HELPER(ret, "Could not detach thread");
 
+
       fprintf(stderr, "flag7");
 
-      //sender thread
-
+      //sender thread args and spawning
       sender_thread_args_t* sender_args = (sender_thread_args_t*)malloc(sizeof(sender_thread_args_t));
-      sender_args->receiver_addr = (char*)malloc(sizeof(client_ip_buf));
-      memcpy(sender_args->receiver_addr, client_ip_buf, sizeof(*(client_ip_buf)));
 
       fprintf(stderr, "flag8");
 

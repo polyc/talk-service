@@ -134,7 +134,7 @@ void* usr_list_recv_thread_routine(void *args){
 
   //struct for thead user list receiver thread bind function
   struct sockaddr_in thread_addr = {0};
-  thread_addr.sin_addr.s_addr = inet_addr(SERVER_IP); //arg->IP for multithread
+  thread_addr.sin_addr.s_addr = inet_addr(LOCAL_IP); //arg->IP for multithread
   thread_addr.sin_family      = AF_INET;
   thread_addr.sin_port        = htons(CLIENT_THREAD_RECEIVER_PORT); // don't forget about network byte order!
 
@@ -228,7 +228,7 @@ int main(int argc, char* argv[]){
   struct sockaddr_in serv_addr = {0};
   serv_addr.sin_family         = AF_INET;
   serv_addr.sin_port           = htons(SERVER_PORT);
-  serv_addr.sin_addr.s_addr    = inet_addr(SERVER_IP);
+  serv_addr.sin_addr.s_addr    = inet_addr(LOCAL_IP);
 
   fprintf(stderr, "flag 1\n");
 
