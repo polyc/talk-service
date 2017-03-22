@@ -35,6 +35,11 @@
   return;
 }*/
 
+GHashTable* usr_list_init(){
+  GHashTable* list = g_hash_table_new(g_str_hash, g_str_equal);
+  return list;
+}
+
 int recv_msg(int socket, char *buf, size_t buf_len) {
     int ret;
     int bytes_read = 0;
@@ -205,7 +210,8 @@ void* sender_routine(void* arg){
 int main(int argc, char const *argv[]) {
   int ret, server_desc, client_desc;
 
-  //TD:list initialization
+  //generating server userlist
+  GHashTable* user_list = usr_list_init();
 
   struct sockaddr_in server_addr = {0};
   int sockaddr_len = sizeof(struct sockaddr_in);
