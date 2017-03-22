@@ -109,16 +109,6 @@ void print_elem_list(const char* buf, int x){
   for(j; j<40; j++){
     if(buf[j]=='-'){ //if end of string break
       fprintf(stdout, "\n");
-      j++;
-      break;
-    }
-    fprintf(stdout, "%c", buf[j]);
-  }
-
-  fprintf(stdout, "Position in user list[Element: %d]: ", x);
-  for(j; j<40; j++){
-    if(buf[j]=='-'){ //if end of string break
-      fprintf(stdout, "\n");
       break;
     }
     fprintf(stdout, "%c", buf[j]);

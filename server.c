@@ -177,7 +177,7 @@ void* sender_routine(void* arg){
   fprintf(stderr, "flag 16\n");
 
   //sendig username ecc.
-  buf = "regibald_94-127.0.0.1-a-0-\n";
+  buf = "regibald_94-127.0.0.1-a-\n";
   bytes_left = strlen(buf);
   bytes_sent = 0;
 

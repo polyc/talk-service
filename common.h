@@ -23,16 +23,6 @@
 #define PTHREAD_ERROR_HELPER(ret, msg)  GENERIC_ERROR_HELPER((ret != 0), ret, msg)
 
 
-//user list sender/receiver thread's single slot buffer
-typedef struct user_list_buffer_s{
-  char user_name[16];
-  char* client_ip;
-  short user_elem_pos;
-  char a_flag;
-}user_list_buffer_t;
-
-//user list
-
 //user list typical element
 typedef struct usr_list_elem_s{
   char user_name[16];
