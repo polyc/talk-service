@@ -2,12 +2,16 @@
 #define __COMMON_H__
 
 #define SERVER_PORT 2015
-#define LOCAL_IP "127.0.0.1" 
+#define LOCAL_IP "127.0.0.1"
 #define CLIENT_THREAD_LISTEN_PORT 1025
 #define CLIENT_THREAD_RECEIVER_PORT 1026
 #define USERLIST_BUFF_SIZE 40
 #define USRNAME_BUF_SIZE 17
 
+//Glib hash manipulation macros
+#define INSERT g_hash_table_insert
+
+//server commands macros
 #define AVAILABLE   'a'
 #define UNAVAILABLE 'u'
 #define QUIT        'q'
