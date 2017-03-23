@@ -256,6 +256,8 @@ int main(int argc, char const *argv[]) {
       //copying username into struct
       memcpy(thread_args->client_user_name, buf, ret);
       free(buf);//free of username buffer
+      //insertion of thread i into hash-table with its args as value
+      INSERT(thread_ref, GINT_TO_POINTER(thread_args->thread_id), (gpointer)thread_args);
 
       fprintf(stderr, "flag5");
 
