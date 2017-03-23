@@ -9,6 +9,8 @@
 #include <signal.h>
 #include <unistd.h>
 #include <strings.h>
+#include <fcntl.h>
+#include <semaphore.h>
 
 #include "client.h"
 #include "common.h"
@@ -152,6 +154,9 @@ void* usr_list_recv_thread_routine(void *args){
 
   fprintf(stderr, "flag 5\n");
 
+  //ublocking listen_semaphore for main process
+  sem_post(&listen_sem);
+
   //accepting connection on user list receiver thread socket
   int rec_socket = accept(arg->socket, (struct sockaddr*) &usrl_sender_address, &usrl_sender_address_len);
   ERROR_HELPER(ret, "Cannot accept connection on user list receiver thread socket");
@@ -220,6 +225,26 @@ int main(int argc, char* argv[]){
   char* client_IP = argv[2];
   strcat(username, "\n"); //concatenating "\n" for server recv function
 
+  //creating sempahore for listen function in usrl_liste_thread_routine
+  sem_t* listen_sem = sem_open(SEM_LISTEN, O_CREAT | O_EXCL, 0640, 1);
+  //handling sem_open errors
+  if (listen_sem == SEM_FAILED && errno == EEXIST) {
+    fprintf(stderr, "[WARNING] listen_sem semaphore already exits.\n");
+
+    //unlinking already open semaphore
+    sem_unlink(SEM_LISTEN);
+
+    // now we can try to create the semaphore from scratch
+    listen_sem = sem_open(SEM_LISTEN, O_CREAT | O_EXCL, 0640, 0);
+  }
+
+  //if sem_open fails again exit(1)
+  if (named_semaphore == SEM_FAILED) {
+    fprintf(stderr, "[FATAL ERROR] Could not open listen_sem semaphore, the reason is: %s\n", errno);
+    exit(1);
+  }
+
+
   //socket descriptor to connect to server
   int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(socket_desc, "Error while creating client socket descriptor");
@@ -281,6 +306,9 @@ int main(int argc, char* argv[]){
   pthread_t thread_usrl_recv;
   ret = pthread_create(&thread_usrl_recv, NULL, usr_list_recv_thread_routine, (void*)usrl_recv_args);
   PTHREAD_ERROR_HELPER(ret, "Unable to create user list receiver thread");
+
+  //waiting for usrl_liste_thread_routine to bind address to socket and to listen
+  sem_wait(&listen_sem);
 
   //wait LISTEN in thread_usrl_rcv!!!!! then go
   //connection to server
