@@ -15,6 +15,9 @@
 #include "client.h"
 #include "common.h"
 
+sem_t* listen_sem;
+
+
 /*
 
 //thread listen routine
@@ -155,7 +158,7 @@ void* usr_list_recv_thread_routine(void *args){
   fprintf(stderr, "flag 5\n");
 
   //ublocking listen_semaphore for main process
-  sem_post(&listen_sem);
+  sem_post(listen_sem);
 
   //accepting connection on user list receiver thread socket
   int rec_socket = accept(arg->socket, (struct sockaddr*) &usrl_sender_address, &usrl_sender_address_len);
@@ -226,7 +229,7 @@ int main(int argc, char* argv[]){
   strcat(username, "\n"); //concatenating "\n" for server recv function
 
   //creating sempahore for listen function in usrl_liste_thread_routine
-  sem_t* listen_sem = sem_open(SEM_LISTEN, O_CREAT | O_EXCL, 0640, 1);
+  listen_sem = sem_open(SEM_LISTEN, O_CREAT | O_EXCL, 0640, 0);
   //handling sem_open errors
   if (listen_sem == SEM_FAILED && errno == EEXIST) {
     fprintf(stderr, "[WARNING] listen_sem semaphore already exits.\n");
@@ -239,8 +242,8 @@ int main(int argc, char* argv[]){
   }
 
   //if sem_open fails again exit(1)
-  if (named_semaphore == SEM_FAILED) {
-    fprintf(stderr, "[FATAL ERROR] Could not open listen_sem semaphore, the reason is: %s\n", errno);
+  if (listen_sem == SEM_FAILED) {
+    fprintf(stderr, "[FATAL ERROR] Could not open listen_sem semaphore, the reason is: %s\n", strerror(errno));
     exit(1);
   }
 
@@ -308,7 +311,13 @@ int main(int argc, char* argv[]){
   PTHREAD_ERROR_HELPER(ret, "Unable to create user list receiver thread");
 
   //waiting for usrl_liste_thread_routine to bind address to socket and to listen
-  sem_wait(&listen_sem);
+  sem_wait(listen_sem);
+
+  fprintf(stderr, "This flag should appear after flag 5 (flag 5 is in usrl_listen_thread_routine)\n");
+
+  //closing and unlinking listen_sem
+  sem_close(listen_sem);
+  sem_unlink(SEM_LISTEN);
 
   //wait LISTEN in thread_usrl_rcv!!!!! then go
   //connection to server
