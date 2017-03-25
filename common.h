@@ -14,6 +14,8 @@
 //server commands macros
 #define AVAILABLE   'a'
 #define UNAVAILABLE 'u'
+#define MODIFY      'm'
+#define DELETE      'd'
 #define QUIT        'q'
 
 #define GENERIC_ERROR_HELPER(cond, errCode, msg) do {             \
@@ -29,7 +31,7 @@
 
 //user list typical element
 typedef struct usr_list_elem_s{
-  char user_name[16];
+  char user_name[16];//should be eliminated because username is used as a key in the hash table
   char* client_ip;
   char a_flag;
 }usr_list_elem_t;

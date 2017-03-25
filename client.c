@@ -18,6 +18,7 @@
 #include "util.h"
 
 sem_t* listen_sem;
+GHashTable* user_list;
 
 
 /*
@@ -158,6 +159,12 @@ void* usr_list_recv_thread_routine(void *args){
         fprintf(stderr, "Error while receiving  user list element[%d] from server", i);
       }
 
+      //
+      //create struct from string received from server
+      //pass struct (which is a usr element) to INSERT function
+      //
+
+
       //print elements sent from server (only for test)
       //send elements to function user list element handler
       print_elem_list(buf, i);
@@ -182,6 +189,9 @@ int main(int argc, char* argv[]){
 
   int ret;
   fprintf(stderr, "flag 0\n");
+
+  //initializing GLibHashTable for user liste
+  GHashTable* user_list = usr_list_init();
 
   //getting username from argv
   char* username = argv[1];
