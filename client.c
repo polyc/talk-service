@@ -11,9 +11,11 @@
 #include <strings.h>
 #include <fcntl.h>
 #include <semaphore.h>
+#include <glib.h>
 
 #include "client.h"
 #include "common.h"
+#include "util.h"
 
 sem_t* listen_sem;
 

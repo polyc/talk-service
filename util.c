@@ -7,7 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <strings.h>
-
+#include <glib.h>
 #include "common.h"
 
 

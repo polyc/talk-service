@@ -13,29 +13,7 @@
 
 #include "server.h"
 #include "common.h"
-
-
-int recv_msg(int socket, char *buf, size_t buf_len) {
-    int ret;
-    int bytes_read = 0;
-
-    // messages longer that buf_len wont be read all
-    while (bytes_read <= buf_len) {
-        ret = recv(socket, buf + bytes_read, 1, 0);
-
-        if (ret == 0) return -1; // client closed the socket
-        if (ret == -1 && errno == EINTR) continue;
-        ERROR_HELPER(ret, "Errore nella lettura da socket");
-
-        // controlling last bye read
-        if (buf[bytes_read] == '\n') break; //end of message
-
-        bytes_read++;
-    }
-
-    buf[bytes_read] = '\0'; //adding string terminator
-    return 0;
-}
+#include "util.h"
 
 //client-process/server-thread communication routine
 void* connection_handler(void* arg){
@@ -226,7 +204,7 @@ int main(int argc, char const *argv[]) {
       thread_args->socket           = client_desc;
       thread_args->thread_id        = thread_count; //unique thread id
       thread_args->user_list        = user_list; //reference to seerver userlist
-      thread_args->client_user_name = (char*)malloc(17*sizeof(char));
+      thread_args->client_user_name = (char*)calloc(USRNAME_BUF_SIZE, sizeof(char));
       thread_args->addr             = client_addr;
 
       //receiving username
@@ -245,10 +223,10 @@ int main(int argc, char const *argv[]) {
 
       fprintf(stderr, "flag4");
       //copying username into struct
-      memcpy(thread_args->client_user_name, buf, ret);
+      memcpy(thread_args->client_user_name, buf, strlen(buf));
       free(buf);//free of username buffer
       //insertion of thread i into hash-table with its args as value
-      INSERT(thread_ref, GINT_TO_POINTER(thread_args->thread_id), (gpointer)thread_args);
+      //INSERT(thread_ref, GINT_TO_POINTER(thread_args->thread_id), (gpointer)thread_args);
 
       fprintf(stderr, "flag5");
 
