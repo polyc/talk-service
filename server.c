@@ -226,11 +226,9 @@ int main(int argc, char const *argv[]) {
       memcpy(thread_args->client_user_name, buf, strlen(buf));
       free(buf);//free of username buffer
       //insertion of thread i into hash-table with its args as value
-      //INSERT(thread_ref, GINT_TO_POINTER(thread_args->thread_id), (gpointer)thread_args);
+      INSERT(thread_ref, GINT_TO_POINTER(thread_args->thread_id), (gpointer)thread_args);
 
       fprintf(stderr, "flag5");
-
-      char* client_ip_buf = inet_ntoa(client_addr->sin_addr); //parsing addr to simplified dotted form
 
       fprintf(stderr, "flag6");
 
