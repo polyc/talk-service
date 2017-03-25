@@ -1,5 +1,5 @@
 CC = gcc -Wall -g
-LDFLAGS = -lpthread
+LDFLAGS = -lpthread -std=c99
 GLIB2-FLAG = `pkg-config --cflags glib-2.0`
 GLIB2-LIBS = `pkg-config --libs glib-2.0`
 

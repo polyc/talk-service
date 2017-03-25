@@ -66,7 +66,7 @@ void print_elem_list(const char* buf, int x){
   }
 
   fprintf(stdout, "IP[Element: %d]: ", x);
-  for(j; j<40; j++){
+  for(; j<40; j++){
     if(buf[j]=='-'){ //if end of string break
       fprintf(stdout, "\n");
       j++;
@@ -76,7 +76,7 @@ void print_elem_list(const char* buf, int x){
   }
 
   fprintf(stdout, "Availability[Element: %d]: ", x);
-  for(j; j<40; j++){
+  for(; j<40; j++){
     if(buf[j]=='-'){ //if end of string break
       fprintf(stdout, "\n");
       break;
@@ -98,9 +98,6 @@ void* usr_list_recv_thread_routine(void *args){
   struct sockaddr_in* usrl_sender_address = calloc(1, sizeof(struct sockaddr_in));
   socklen_t usrl_sender_address_len = sizeof(usrl_sender_address);
 
-
-  //allocating address struct for incoming connection from server
-  struct sockaddr_in* server_addr = calloc(1, sizeof(struct sockaddr_in));
 
   //struct for thead user list receiver thread bind function
   struct sockaddr_in thread_addr = {0};
@@ -131,10 +128,8 @@ void* usr_list_recv_thread_routine(void *args){
 
   fprintf(stderr, "flag 6\n");
 
-  //number of future elemnts in buf
-  int elem_buf_len = 0;
+  //buffer for recv_msg function
   char* buf = (char*)calloc(USERLIST_BUFF_SIZE,sizeof(char));
-
 
   //receiving user list element from server
   //while(1){
