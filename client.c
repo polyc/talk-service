@@ -101,7 +101,7 @@ void* usr_list_recv_thread_routine(void *args){
 
   //struct for thead user list receiver thread bind function
   struct sockaddr_in thread_addr = {0};
-  thread_addr.sin_addr.s_addr = inet_addr(LOCAL_IP); //arg->IP for multithread
+  thread_addr.sin_addr.s_addr = inet_addr(LOCAL_IP);
   thread_addr.sin_family      = AF_INET;
   thread_addr.sin_port        = htons(CLIENT_THREAD_RECEIVER_PORT); // don't forget about network byte order!
 
@@ -185,7 +185,6 @@ int main(int argc, char* argv[]){
 
   //getting username from argv
   char* username = argv[1];
-  char* client_IP = argv[2];
   strcat(username, "\n"); //concatenating "\n" for server recv function
 
   //creating sempahore for listen function in usrl_liste_thread_routine
@@ -263,7 +262,6 @@ int main(int argc, char* argv[]){
   //creating parameters for user list receiver thread funtion
   receiver_thread_args_t* usrl_recv_args = (receiver_thread_args_t*)malloc(sizeof(receiver_thread_args_t));
   usrl_recv_args->socket = usrl_recv_socket;
-  usrl_recv_args->IP     = client_IP;
 
   //creating and spawning user list receiver thread with parameters
   pthread_t thread_usrl_recv;
