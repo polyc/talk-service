@@ -202,7 +202,6 @@ int main(int argc, char const *argv[]) {
       // put arguments for the new thread into a buffer
       thread_args_t* thread_args = (thread_args_t*)malloc(sizeof(thread_args_t));
       thread_args->socket           = client_desc;
-      thread_args->thread_id        = thread_count; //unique thread id
       thread_args->user_list        = user_list; //reference to seerver userlist
       thread_args->client_user_name = (char*)calloc(USRNAME_BUF_SIZE, sizeof(char));
       thread_args->addr             = client_addr;
@@ -225,8 +224,13 @@ int main(int argc, char const *argv[]) {
       //copying username into struct
       memcpy(thread_args->client_user_name, buf, strlen(buf));
       free(buf);//free of username buffer
+
+      //allocation of memory for hash table
+      int* thread_id = (int*)malloc(sizeof(int));
+      *(thread_id) = thread_count;
+
       //insertion of thread i into hash-table with its args as value
-      INSERT(thread_ref, GINT_TO_POINTER(thread_args->thread_id), (gpointer)thread_args);
+      INSERT(thread_ref, (gpointer)thread_id, (gpointer)thread_args);
 
       fprintf(stderr, "flag5");
 
