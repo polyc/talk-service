@@ -14,15 +14,6 @@
 #include "server.h"
 #include "common.h"
 
-GHashTable* usr_list_init(){
-  GHashTable* list = g_hash_table_new(g_str_hash, g_str_equal);
-  return list;
-}
-
-GHashTable* thread_ref_init(){
-  GHashTable* list = g_hash_table_new(g_int_hash, g_int_equal);
-  return list;
-}
 
 int recv_msg(int socket, char *buf, size_t buf_len) {
     int ret;
