@@ -6,10 +6,13 @@
 #define CLIENT_THREAD_LISTEN_PORT 1025
 #define CLIENT_THREAD_RECEIVER_PORT 1026
 #define USERLIST_BUFF_SIZE 40
-#define USRNAME_BUF_SIZE 17
+#define USERNAME_BUF_SIZE 17
 
 //Glib hash manipulation macros
-#define INSERT g_hash_table_insert
+#define INSERT    g_hash_table_insert
+#define REPLACE   g_hash_table_replace
+#define CONTAINS  g_hash_table_contains
+#define REMOVE    g_hash_table_delete
 
 //server commands macros
 #define AVAILABLE   'a'
