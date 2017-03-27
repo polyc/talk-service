@@ -10,6 +10,8 @@
 #include <signal.h>
 #include <unistd.h>
 #include <glib.h>
+#include <fcntl.h>
+#include <semaphore.h>
 
 #include "server.h"
 #include "common.h"

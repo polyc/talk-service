@@ -31,7 +31,6 @@
 
 //user list typical element
 typedef struct usr_list_elem_s{
-  char user_name[16];//should be eliminated because username is used as a key in the hash table
   char* client_ip;
   char a_flag;
 }usr_list_elem_t;
