@@ -42,11 +42,12 @@ void* connection_handler(void* arg){
   fprintf(stderr, "flag 2\n");
 
   //user list element
-  struct usr_list_elem_t* element = (struct usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
+  usr_list_elem_t* element = (usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
 
   //filling element struct with client data;
-  element-> client_ip = args->client_ip;
-  element-> a_flag = AVAILABLE;
+  element->client_ip = (char*)malloc(INET_ADDRSTRLEN*sizeof(char));
+  memcpy(element->client_ip, args->client_ip, INET_ADDRSTRLEN);
+  element->a_flag = AVAILABLE;
 
   //inserting user into hash-table userlist
   INSERT(user_list, (gpointer)args->client_user_name, (gpointer)element);
@@ -56,7 +57,7 @@ void* connection_handler(void* arg){
   ret = close(args->socket);//close client_desc
   ERROR_HELPER(ret, "Cannot close socket for incoming connection");
 
-  //free(args->client_ip); //free of client_ip dotted
+  free(args->client_ip); //free of client_ip dotted
   //free(args);
   pthread_exit(NULL);
 }

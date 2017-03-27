@@ -5,7 +5,6 @@
 typedef struct thread_args_s{
   int socket;
   char* client_ip;
-  GHashTable* user_list; //reference to server userlist
   char* client_user_name;
 } thread_args_t;
 
