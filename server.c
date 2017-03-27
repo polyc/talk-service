@@ -17,6 +17,9 @@
 #include "common.h"
 #include "util.h"
 
+
+GHashTable* user_list;
+
 //client-process/server-thread communication routine
 void* connection_handler(void* arg){
 
@@ -36,41 +39,25 @@ void* connection_handler(void* arg){
   size_t u_command_len = strlen(u_command);
   */
 
-  //user list element buffer
-  //struct usr_list_elem_t* element = (struct usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
-
   fprintf(stderr, "flag 2\n");
 
+  //user list element
+  struct usr_list_elem_t* element = (struct usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
 
-  //filling element
-  //create_user_list_element(element, thread_args.addr, args, buf);
+  //filling element struct with client data;
+  element-> client_ip = args->client_ip;
+  element-> a_flag = AVAILABLE;
 
+  //inserting user into hash-table userlist
+  INSERT(user_list, (gpointer)args->client_user_name, (gpointer)element);
 
-  //fprintf(stderr, "message read\n");
-
-  /*TD:
-    -list insertion
-  */
-
-  //while(1){
-    /*//read message from client
-    while ((recv_bytes = recv(args->socket, buf, buf_len, 0)) < 0) {
-      if (errno == EINTR) continue;
-      ERROR_HELPER(-1, "Cannot read from socket");
-    }
-
-    // quit command check
-    //if (recv_bytes == quit_command_len && !memcmp(buf, quit_command, quit_command_len)) break;
-
-    //TD: -other commands management*/
-  //}
   fprintf(stderr, "flag 10\n");
   //CLOSE OPERATIONS (TO BE COMPLETED)
   ret = close(args->socket);//close client_desc
   ERROR_HELPER(ret, "Cannot close socket for incoming connection");
 
-  free(args->addr); //free of client_addr
-  free(args);
+  //free(args->client_ip); //free of client_ip dotted
+  //free(args);
   pthread_exit(NULL);
 }
 
@@ -155,11 +142,11 @@ void* sender_routine(void* arg){
 int main(int argc, char const *argv[]) {
   int ret, server_desc, client_desc, thread_count = 0;
 
+  //generating server userlist
+  user_list = usr_list_init();
+
   //generating thread data structure
   GHashTable* thread_ref = thread_ref_init();
-
-  //generating server userlist
-  GHashTable* user_list = usr_list_init();
 
   struct sockaddr_in server_addr = {0};
   int sockaddr_len = sizeof(struct sockaddr_in);
@@ -198,15 +185,18 @@ int main(int argc, char const *argv[]) {
 
       fprintf(stderr, "flag 1\n");
 
+      //parsing client ip in dotted form
+      char* client_ip_buf = inet_ntoa(client_addr->sin_addr);
+
       //thread spawning
 
       //client management thread
       // put arguments for the new thread into a buffer
       thread_args_t* thread_args = (thread_args_t*)malloc(sizeof(thread_args_t));
       thread_args->socket           = client_desc;
-      thread_args->user_list        = user_list; //reference to seerver userlist
       thread_args->client_user_name = (char*)calloc(USRNAME_BUF_SIZE, sizeof(char));
-      thread_args->addr             = client_addr;
+      thread_args->client_ip        = (char*)malloc(INET_ADDRSTRLEN*sizeof(char));
+      memcpy(thread_args->client_ip, client_ip_buf, INET_ADDRSTRLEN);
 
       //receiving username
       char* buf = (char*)calloc(USRNAME_BUF_SIZE, sizeof(char));

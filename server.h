@@ -4,8 +4,8 @@
 //data structure passed to threads on creation
 typedef struct thread_args_s{
   int socket;
-  struct sockaddr_in* addr;
-  GHashTable* user_list;
+  char* client_ip;
+  GHashTable* user_list; //reference to server userlist
   char* client_user_name;
 } thread_args_t;
 
