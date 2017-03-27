@@ -17,7 +17,7 @@
 #include "common.h"
 #include "util.h"
 
-sem_t* sync_receiver;
+sem_t sync_receiver;
 GHashTable* user_list;
 
 
@@ -51,63 +51,53 @@ void* listen_thread_routine(void *args){
 }
 */
 
-void update_list(const char* buf_userName, const struct usr_list_elem_t* elem, const char* mod_command){
-  int ret;
+void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command){
 
-  if(mod_command == MODIFY){
-    if(CONTAINS(user_list, (gpointer)buf_userName)){
-      REPLACE(user_list, (gpointer)buf_userName, (gpointer)elem);
-      return;
-    }
-    else{
-      INSERT(user_list, (gpointer)buf_userName, (gpointer)elem);
-      return;
-    }
+  fprintf(stdout, "%s\n", buf_userName);
+
+  if(mod_command[0] == MODIFY){
+    REPLACE(user_list, (gpointer)buf_userName, (gpointer)elem);
+    return;
   }
   else{
     REMOVE(user_list, (gpointer)buf_userName);
     return;
   }
-  return;
+
 }
 
-void parse_elem_list(const char* buf, struct usr_list_elem_t* elem, char* buf_userName, char* mod_command){
+void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName, char* mod_command){
 
   int j;
-  char* usr_name = "";
-  char* IP = "";
-  char flag;
 
-  mod_command = buf[0];
+  mod_command[0] = buf[0];
 
   for(j=2; j<42; j++){
     if(buf[j]=='-'){ //if end of string break
       j++;
       break;
     }
-    strcat(usr_name, buf[j]);
   }
+
+  memcpy(buf_userName, buf, )
 
   for(; j<42; j++){
     if(buf[j]=='-'){ //if end of string break
       j++;
       break;
     }
-    strcat(IP, buf[j]);
+    strcat(elem->client_ip, (char*)&buf[j]);
   }
 
   //checking availability char
   if(buf[j] == AVAILABLE){
-    flag = AVAILABLE;
+    elem->a_flag = AVAILABLE;
   }
   else{
-    flag = UNAVAILABLE;
+    elem->a_flag = UNAVAILABLE;
   }
 
-  buf_userName = usr_name;
-
-  elem->client_ip = IP;
-  elem->a_flag    = flag;
+  fprintf(stdout, "%s\n\n\n", buf_userName);
 
   return;
 
@@ -146,9 +136,9 @@ void* usr_list_recv_thread_routine(void *args){
 
   fprintf(stderr, "flag 5\n");
 
-  //ublocking sync_receiver for main process
-  ret = sem_post(sync_receiver);
-  ERROR_HELPER(ret, "Error in sem_post on sync_receiver semaphore (user list receiver thread routine)");
+  //ublocking &sync_receiver for main process
+  ret = sem_post(&sync_receiver);
+  ERROR_HELPER(ret, "Error in sem_post on &sync_receiver semaphore (user list receiver thread routine)");
 
   //accepting connection on user list receiver thread socket
   int rec_socket = accept(arg->socket, (struct sockaddr*) &usrl_sender_address, &usrl_sender_address_len);
@@ -193,16 +183,21 @@ void* usr_list_recv_thread_routine(void *args){
 
       //creating struct usr_list_elem_t* for create_elem_list function
       usr_list_elem_t* elem = (usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
+      elem->client_ip = (char*)calloc(INET_ADDRSTRLEN,sizeof(char*));
 
       //creating buffer for username and command to pass to create_elem_list function
-      char* userName = (char*)malloc(USERNAME_BUF_SIZE*sizeof(char));
-      char* command = (char*)malloc(sizeof(char));
+      char* userName = (char*)calloc(USERNAME_BUF_SIZE,sizeof(char));
+      char* command = (char*)calloc(1,sizeof(char));
+
+      fprintf(stderr, "flag 9\n");
 
       //passing string with usr elements to be parsed by create_elem_list
       parse_elem_list(buf, elem, userName, command);
 
+      fprintf(stderr, "flag 10\n");
+
       //updating elem list
-      ret = update_list(userName, elem, command);
+      update_list(userName, elem, command);
 
 
     }// end of for loop
@@ -234,8 +229,8 @@ int main(int argc, char* argv[]){
   strcat(username, "\n"); //concatenating "\n" for server recv function
 
   //creating sempahore for listen function in usrl_liste_thread_routine
-  ret = sem_init(sync_receiver, 0, 0);
-  ERROR_HELPER(ret, "[FATAL ERROR] Could not open sync_receiver semaphore");
+  ret = sem_init(&sync_receiver, 0, 0);
+  ERROR_HELPER(ret, "[FATAL ERROR] Could not open &sync_receiver semaphore");
 
   //socket descriptor to connect to server
   int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
@@ -299,14 +294,14 @@ int main(int argc, char* argv[]){
   PTHREAD_ERROR_HELPER(ret, "Unable to create user list receiver thread");
 
   //waiting for usrl_liste_thread_routine to bind address to socket and to listen
-  ret = sem_wait(sync_receiver);
+  ret = sem_wait(&sync_receiver);
   ERROR_HELPER(ret, "Error in sem_wait (main process)");
 
   fprintf(stderr, "This flag should appear after flag 5 (flag 5 is in usrl_listen_thread_routine)\n");
 
-  //closing and unlinking sync_receiver
-  ret = sem_destroy(sync_receiver);
-  ERROR_HELPER(ret, "Error destroying sync_receiver semaphore");
+  //closing and unlinking &sync_receiver
+  ret = sem_destroy(&sync_receiver);
+  ERROR_HELPER(ret, "Error destroying &sync_receiver semaphore");
 
   //wait LISTEN in thread_usrl_rcv!!!!! then go
   //connection to server
@@ -317,11 +312,11 @@ int main(int argc, char* argv[]){
 
   //sending buffer init data for user list
   //creating buffer for username and availability flag
-  char* username_buf = (char*)malloc(USRNAME_BUF_SIZE*sizeof(char));
-  strncpy(username_buf, username, strlen(username));
+  char* username_buf_server = (char*)malloc(USERNAME_BUF_SIZE*sizeof(char));
+  strncpy(username_buf_server, username, strlen(username));
 
   //sending username to server
-  send_msg(socket_desc, username_buf);
+  send_msg(socket_desc, username_buf_server);
 
 
   //detatching from user list receiver thread
@@ -329,9 +324,12 @@ int main(int argc, char* argv[]){
   PTHREAD_ERROR_HELPER(ret, "Unable to detatch from user list receiver thread");
   //
   //detached from user list receiver thread
-
-
   fprintf(stderr, "flag 4\n");
+
+  //print elemets from user list ONLY FOR TEST
+  fprintf(stdout, "Found regibald? %d\n", CONTAINS(user_list, "regibald_94"));
+
+  fprintf(stderr, "flag 4.1\n");
 
   // close socket
   ret = close(socket_desc);

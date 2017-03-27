@@ -110,7 +110,7 @@ void* sender_routine(void* arg){
   fprintf(stderr, "flag 16\n");
 
   //sendig username ecc.
-  buf = "regibald_94-127.0.0.1-a-\n";
+  buf = "m-regibald_94-127.0.0.1-a-\n";
   bytes_left = strlen(buf);
   bytes_sent = 0;
 
@@ -195,17 +195,17 @@ int main(int argc, char const *argv[]) {
       // put arguments for the new thread into a buffer
       thread_args_t* thread_args = (thread_args_t*)malloc(sizeof(thread_args_t));
       thread_args->socket           = client_desc;
-      thread_args->client_user_name = (char*)calloc(USRNAME_BUF_SIZE, sizeof(char));
+      thread_args->client_user_name = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
       thread_args->client_ip        = (char*)malloc(INET_ADDRSTRLEN*sizeof(char));
       memcpy(thread_args->client_ip, client_ip_buf, INET_ADDRSTRLEN);
 
       //receiving username
-      char* buf = (char*)calloc(USRNAME_BUF_SIZE, sizeof(char));
-      ret = recv_msg(client_desc , buf, USRNAME_BUF_SIZE);
+      char* buf = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
+      ret = recv_msg(client_desc , buf, USERNAME_BUF_SIZE);
       ERROR_HELPER(ret, "client closed the socket");
 
       //print test
-      for (size_t i = 0; i < USRNAME_BUF_SIZE ; i++) {
+      for (size_t i = 0; i < USERNAME_BUF_SIZE ; i++) {
         if(buf[i]=='\0'){ //if end of string break
           break;
         }

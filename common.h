@@ -12,7 +12,7 @@
 #define INSERT    g_hash_table_insert
 #define REPLACE   g_hash_table_replace
 #define CONTAINS  g_hash_table_contains
-#define REMOVE    g_hash_table_delete
+#define REMOVE    g_hash_table_remove
 
 //server commands macros
 #define AVAILABLE   'a'
