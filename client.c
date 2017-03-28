@@ -53,8 +53,6 @@ void* listen_thread_routine(void *args){
 
 void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command){
 
-  fprintf(stdout, "%s\n", buf_userName);
-
   if(mod_command[0] == MODIFY){
     REPLACE(user_list, (gpointer)buf_userName, (gpointer)elem);
     return;
@@ -68,7 +66,7 @@ void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command){
 
 void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName, char* mod_command){
 
-  int j;
+  int i, j;
 
   mod_command[0] = buf[0];
 
@@ -79,15 +77,20 @@ void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName,
     }
   }
 
-  memcpy(buf_userName, buf, )
+  strncpy(buf_userName, buf+2, j-3);
+  buf_userName[j-3] = '\0';
+
+  i = j;
 
   for(; j<42; j++){
     if(buf[j]=='-'){ //if end of string break
       j++;
       break;
     }
-    strcat(elem->client_ip, (char*)&buf[j]);
   }
+
+  strncpy(elem->client_ip, buf+i, j-i-1);
+  elem->client_ip[j-i-1] = '\0';
 
   //checking availability char
   if(buf[j] == AVAILABLE){
@@ -97,7 +100,11 @@ void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName,
     elem->a_flag = UNAVAILABLE;
   }
 
-  fprintf(stdout, "%s\n\n\n", buf_userName);
+  //checking if parsing done right
+  fprintf(stdout, "[CHECK USERNAME] %s\n", buf_userName);
+  fprintf(stdout, "[CHECK IP] %s\n", elem->client_ip);
+  fprintf(stdout, "[CHECK AVAILABILITY] %c\n", elem->a_flag);
+  fprintf(stdout, "[CHECK COMMAND] %s\n", mod_command);
 
   return;
 
@@ -208,6 +215,9 @@ void* usr_list_recv_thread_routine(void *args){
 
   ret = close(rec_socket);
   ERROR_HELPER(ret, "Cannot close socket");
+
+  ret = close(arg->socket);
+  ERROR_HELPER(ret, "Cannot close usrl_recv_socket");
 
   free(buf);
 
@@ -327,16 +337,16 @@ int main(int argc, char* argv[]){
   fprintf(stderr, "flag 4\n");
 
   //print elemets from user list ONLY FOR TEST
-  fprintf(stdout, "Found regibald? %d\n", CONTAINS(user_list, "regibald_94"));
+  //fprintf(stdout, "Found regibald? %d\n", CONTAINS(user_list, "regibald_94"));
 
   fprintf(stderr, "flag 4.1\n");
 
-  // close socket
+  // close client main process socket
   ret = close(socket_desc);
   ERROR_HELPER(ret, "Cannot close socket_desc");
 
-  ret = close(usrl_recv_socket);
-  ERROR_HELPER(ret, "Cannot close usrl_recv_socket");
+  //ret = close(usrl_recv_socket);
+  //ERROR_HELPER(ret, "Cannot close usrl_recv_socket");
 
   exit(EXIT_SUCCESS);
 
