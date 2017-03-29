@@ -107,6 +107,10 @@ void* sender_routine(void* arg){
   }
   bzero(buf, USERLIST_BUFF_SIZE);
 
+  //retreiving user information from hash table
+  usr_list_elem_t* element = (usr_list_elem_t*)LOOKUP(user_list, (gconstpointer)"fulco_94");
+  HASH_TABLE_ERROR_HELPER(element, "user not present in list");
+
   fprintf(stderr, "flag 16\n");
 
   //sendig user data to client

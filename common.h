@@ -13,6 +13,7 @@
 #define REPLACE   g_hash_table_replace
 #define CONTAINS  g_hash_table_contains
 #define REMOVE    g_hash_table_remove
+#define LOOKUP    g_hash_table_lookup
 
 //server commands macros
 #define AVAILABLE   'a'
@@ -30,6 +31,7 @@
 
 #define ERROR_HELPER(ret, msg)          GENERIC_ERROR_HELPER((ret < 0), errno, msg)
 #define PTHREAD_ERROR_HELPER(ret, msg)  GENERIC_ERROR_HELPER((ret != 0), ret, msg)
+#define HASH_TABLE_ERROR_HELPER(ret, msg) GENERIC_ERROR_HELPER((ret == NULL), ret, msg)
 
 
 //user list typical element
