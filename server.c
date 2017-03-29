@@ -109,7 +109,7 @@ void* sender_routine(void* arg){
 
   fprintf(stderr, "flag 16\n");
 
-  //sendig username ecc.
+  //sendig user data to client
   buf = "m-regibald_94-127.0.0.1-a-\n";
   bytes_left = strlen(buf);
   bytes_sent = 0;
@@ -124,7 +124,7 @@ void* sender_routine(void* arg){
       if (ret == -1 && errno == EINTR){
         continue;
       }
-      ERROR_HELPER(ret, "Error while sending username to server");
+      ERROR_HELPER(ret, "Error while sending serialized user to server");
 
       bytes_left -= ret;
       bytes_sent += ret;
