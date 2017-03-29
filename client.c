@@ -232,7 +232,7 @@ int main(int argc, char* argv[]){
   fprintf(stderr, "flag 0\n");
 
   //initializing GLibHashTable for user liste
-  GHashTable* user_list = usr_list_init();
+  user_list = usr_list_init();
 
   //getting username from argv
   char* username = argv[1];
@@ -337,7 +337,7 @@ int main(int argc, char* argv[]){
   fprintf(stderr, "flag 4\n");
 
   //print elemets from user list ONLY FOR TEST
-  //fprintf(stdout, "Found regibald? %d\n", CONTAINS(user_list, "regibald_94"));
+  fprintf(stdout, "Found regibald? %d\n", CONTAINS(user_list, "regibald_94"));
 
   fprintf(stderr, "flag 4.1\n");
 
