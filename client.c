@@ -51,6 +51,24 @@ void* listen_thread_routine(void *args){
 }
 */
 
+int get_username(char* username){
+  int i;
+
+  fprintf(stdout, "Enter username: ");
+  fgets(username, sizeof(username), stdin);
+
+  //checking if username contains '-' character
+  for(i=0; i<sizeof(username); i++){
+    if(username[i]=='-'){
+      return 0; //contains '-' character, username not ok return 0
+    }
+  }
+
+  strcat(username, "\n"); //concatenating "\n" for server recv function
+
+  return 1; //usrname ok
+}
+
 void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command){
 
   if(mod_command[0] == MODIFY){
@@ -234,9 +252,19 @@ int main(int argc, char* argv[]){
   //initializing GLibHashTable for user liste
   user_list = usr_list_init();
 
-  //getting username from argv
-  char* username = argv[1];
-  strcat(username, "\n"); //concatenating "\n" for server recv function
+  //initializing username buffer
+  char* username = (char*)malloc(USERNAME_BUF_SIZE*sizeof(char));
+
+  //getting username from user   add max number of attempts
+  while(1){
+    ret = get_username(username);
+    if(ret==1){
+      break;
+    }
+    username = realloc(username, USERNAME_BUF_SIZE); //reallocating buffer for username
+    fprintf(stdout, "Char [ '-' ] found in username ... input correct username\n");
+
+  }
 
   //creating sempahore for listen function in usrl_liste_thread_routine
   ret = sem_init(&sync_receiver, 0, 0);
@@ -277,7 +305,7 @@ int main(int argc, char* argv[]){
   //creating parameters for listen thread funtion
   listen_thread_args_t* t_listen_args = (listen_thread_args_t*) malloc(sizeof(listen_thread_args_t));
   t_listen_args.socket = socket_listen_thread_desc;
-  t_listen_args.addr   = incoming_client_addr;
+  t_listen_args.addr   = incoming_client_addr;username
 
   //creating and spawning thread listen with parameters
   pthread_t thread_listen;
