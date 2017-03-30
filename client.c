@@ -55,11 +55,21 @@ int get_username(char* username){
   int i;
 
   fprintf(stdout, "Enter username: ");
+  fflush(stdout);
   fgets(username, sizeof(username), stdin);
+  fflush(stdin);
+
+  //checking if username has atleast 1 character
+  if(strlen(username)==0){
+    fprintf(stdout, "No username input\n");
+    fflush(stdout);
+    return 0;
+  }
 
   //checking if username contains '-' character
   for(i=0; i<sizeof(username); i++){
     if(username[i]=='-'){
+      fprintf(stdout, "Char '-' found in username ... input correct username\n");
       return 0; //contains '-' character, username not ok return 0
     }
   }
@@ -262,7 +272,6 @@ int main(int argc, char* argv[]){
       break;
     }
     username = realloc(username, USERNAME_BUF_SIZE); //reallocating buffer for username
-    fprintf(stdout, "Char [ '-' ] found in username ... input correct username\n");
 
   }
 
