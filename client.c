@@ -56,7 +56,7 @@ int get_username(char* username){
 
   fprintf(stdout, "Enter username: ");
   fflush(stdout);
-  fgets(username, sizeof(username), stdin);
+  fgets(username, sizeof(username)+1, stdin);
   fflush(stdin);
 
   //checking if username has atleast 1 character
