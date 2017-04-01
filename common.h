@@ -14,6 +14,7 @@
 #define CONTAINS  g_hash_table_contains
 #define REMOVE    g_hash_table_remove
 #define LOOKUP    g_hash_table_lookup
+#define FOR_EACH  g_hash_table_foreach
 
 //server commands macros
 #define AVAILABLE   'a'

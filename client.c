@@ -51,6 +51,28 @@ void* listen_thread_routine(void *args){
 }
 */
 
+static void print_userList(gpointer key, gpointer elem, gpointer data){
+
+  char* username = (char*)key;
+
+  usr_list_elem_t* usr_elem = (usr_list_elem_t*)elem;
+
+  fprintf(stdout, "###############################################\n");
+  fprintf(stdout, "Username: %s\n", username);
+  fprintf(stdout, "IP:       %s\n", usr_elem->client_ip);
+
+  if(usr_elem->a_flag == AVAILABLE){
+    fprintf(stdout, "Flag:     AVAILABLE\n");
+  }
+  else{
+    fprintf(stdout, "Flag:     UNAVAILABLE\n");
+  }
+
+  fprintf(stdout, "###############################################\n");
+  fflush(stdout);
+  return;
+}
+
 int get_username(char* username){
   int i;
 
@@ -70,6 +92,7 @@ int get_username(char* username){
   for(i=0; i<sizeof(username); i++){
     if(username[i]=='-'){
       fprintf(stdout, "Char '-' found in username ... input correct username\n");
+      fflush(stdout);
       return 0; //contains '-' character, username not ok return 0
     }
   }
@@ -193,7 +216,7 @@ void* usr_list_recv_thread_routine(void *args){
     //number of modifications to receive
     ret = recv_msg(rec_socket, buf, USERLIST_BUFF_SIZE);
     if(ret != 0){
-      fprintf(stderr, "Error while receiving number of modifications from server");
+      fprintf(stderr, "Error while receiving number of modifications from server\n");
     }
 
 
@@ -374,7 +397,9 @@ int main(int argc, char* argv[]){
   fprintf(stderr, "flag 4\n");
 
   //print elemets from user list ONLY FOR TEST
-  fprintf(stdout, "Found regibald? %d\n", CONTAINS(user_list, "regibald_94"));
+  //fprintf(stdout, "Found regibald? %d\n", CONTAINS(user_list, "regibald_94"));
+
+  FOR_EACH(user_list, print_userList, NULL); //printing hashtable
 
   fprintf(stderr, "flag 4.1\n");
 
