@@ -18,6 +18,7 @@
 //server commands macros
 #define AVAILABLE   'a'
 #define UNAVAILABLE 'u'
+#define NEW         'n'
 #define MODIFY      'm'
 #define DELETE      'd'
 #define QUIT        'q'
