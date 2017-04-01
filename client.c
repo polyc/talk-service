@@ -231,7 +231,7 @@ void* usr_list_recv_thread_routine(void *args){
       //receiveing user list element i from server
       ret = recv_msg(rec_socket, buf, USERLIST_BUFF_SIZE);
       if(ret != 0){
-        fprintf(stderr, "Error while receiving  user list element[%d] from server", i);
+        fprintf(stderr, "Error while receiving  user list element[%d] from server\n", i);
       }
 
       //

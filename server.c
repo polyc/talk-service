@@ -21,7 +21,7 @@
 GHashTable* user_list;
 
 //transform a usr_list_elem_t in a string according to mod_command
-void* stringify_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command){
+void stringify_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command){
   fprintf(stdout, "sono dentro la funzione di serializzazione\n");
   *buf_out = "";
   strcat(buf_out, &mod_command);
