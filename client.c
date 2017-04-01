@@ -104,7 +104,8 @@ int get_username(char* username){
 
 void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command){
 
-  if(mod_command[0] == MODIFY){
+  //distiguere tra modify new e delete se e' modify usare LOOKUP
+  if(mod_command[0] == MODIFY || mod_command[0] == NEW){
     REPLACE(user_list, (gpointer)buf_userName, (gpointer)elem);
     return;
   }
@@ -144,12 +145,16 @@ void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName,
   elem->client_ip[j-i-1] = '\0';
 
   //checking availability char
+  /*
   if(buf[j] == AVAILABLE){
     elem->a_flag = AVAILABLE;
   }
   else{
     elem->a_flag = UNAVAILABLE;
   }
+  */
+
+  elem->a_flag = buf[j];
 
   //checking if parsing done right
   fprintf(stdout, "[CHECK USERNAME] %s\n", buf_userName);

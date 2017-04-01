@@ -15,4 +15,4 @@ typedef struct sender_thread_args_s{
 
 void* connection_handler(void* arg);
 void* sender_routine(void* arg);
-void* stringify_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command);
+void stringify_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command);
