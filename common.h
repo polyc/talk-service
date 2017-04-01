@@ -5,8 +5,8 @@
 #define LOCAL_IP "127.0.0.1"
 #define CLIENT_THREAD_LISTEN_PORT 1025
 #define CLIENT_THREAD_RECEIVER_PORT 1026
-#define USERLIST_BUFF_SIZE 40
 #define USERNAME_BUF_SIZE 17
+#define USERLIST_BUFF_SIZE 7 + USERNAME_BUF_SIZE + INET_ADDRSTRLEN
 
 //Glib hash manipulation macros
 #define INSERT    g_hash_table_insert
