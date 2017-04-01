@@ -24,7 +24,8 @@ GHashTable* user_list;
 void stringify_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command){
   fprintf(stdout, "sono dentro la funzione di serializzazione\n");
   *buf_out = "";
-  strcat(buf_out, &mod_command);
+  buf_out[0] = mod_command;
+  //strcat(buf_out, &mod_command);
   strcat(buf_out, "-");
   strcat(buf_out, buf_username);
   fprintf(stdout, "maremma maiala\n");
@@ -45,6 +46,7 @@ void stringify_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_user
     return;
   }
   else{//mod_command == MOD
+    strcat(buf_out, "-");
     strcat(buf_out, &(elem->a_flag));
     strcat(buf_out, "-\n");
     return;
@@ -151,7 +153,7 @@ void* sender_routine(void* arg){
   fprintf(stdout, "%c\n", element->a_flag);
   fprintf(stderr, "flag 16\n");
 
-  char mod_command = 'm';
+  char mod_command = 'n';
   fprintf(stdout, "%c\n", mod_command);
 
   //serializing user element
