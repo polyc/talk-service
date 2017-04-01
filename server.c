@@ -50,7 +50,9 @@ void* connection_handler(void* arg){
   element->a_flag = AVAILABLE;
 
   //inserting user into hash-table userlist
-  INSERT(user_list, (gpointer)args->client_user_name, (gpointer)element);
+  ret = INSERT(user_list, (gpointer)args->client_user_name, (gpointer)element);
+  if(ret == 0) fprintf(stdout, "yet present\n");
+  while(1){}
 
   fprintf(stderr, "flag 10\n");
   //CLOSE OPERATIONS (TO BE COMPLETED)
@@ -77,7 +79,7 @@ void* sender_routine(void* arg){
   int ret, bytes_left, bytes_sent = 0;
 
   int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
-  ERROR_HELPER(ret, "Cannot create sender thread socket");
+  ERROR_HELPER(socket_desc, "Cannot create sender thread socket");
 
   ret = connect(socket_desc, (struct sockaddr*) &rec_addr, sizeof(struct sockaddr_in));
   ERROR_HELPER(ret, "Error trying to connect to client receiver thread");
@@ -107,14 +109,18 @@ void* sender_routine(void* arg){
   }
   bzero(buf, USERLIST_BUFF_SIZE);
 
-  //retreiving user information from hash table
-  usr_list_elem_t* element = (usr_list_elem_t*)LOOKUP(user_list, (gconstpointer)"fulco_94");
-  HASH_TABLE_ERROR_HELPER(element, "user not present in list");
+  char* test_username = calloc(8, sizeof(char));
+  memcpy(test_username, "fulco_94", 8);
 
+
+  //retreiving user information from hash table
+  usr_list_elem_t* element = (usr_list_elem_t*)LOOKUP(user_list, (gconstpointer)test_username);
+  fprintf(stdout,"%s\n", element->client_ip);
+  fprintf(stdout, "%c\n", element->a_flag);
   fprintf(stderr, "flag 16\n");
 
   //sendig user data to client
-  buf = "m-regibald_94-127.0.0.1-a-\n";
+  buf = "m-fulco_94-127.0.0.1-a-\n";
   bytes_left = strlen(buf);
   bytes_sent = 0;
 
@@ -209,13 +215,7 @@ int main(int argc, char const *argv[]) {
       ERROR_HELPER(ret, "client closed the socket");
 
       //print test
-      for (size_t i = 0; i < USERNAME_BUF_SIZE ; i++) {
-        if(buf[i]=='\0'){ //if end of string break
-          break;
-        }
-        fprintf(stdout, "%c",buf[i]);
-      }
-      fprintf(stdout, "\n");
+      fprintf(stdout, "%s\n",buf);
 
       fprintf(stderr, "flag4");
       //copying username into struct

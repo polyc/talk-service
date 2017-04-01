@@ -19,6 +19,7 @@
 //server commands macros
 #define AVAILABLE   'a'
 #define UNAVAILABLE 'u'
+#define NEW         'n'
 #define MODIFY      'm'
 #define DELETE      'd'
 #define QUIT        'q'
@@ -32,7 +33,6 @@
 
 #define ERROR_HELPER(ret, msg)          GENERIC_ERROR_HELPER((ret < 0), errno, msg)
 #define PTHREAD_ERROR_HELPER(ret, msg)  GENERIC_ERROR_HELPER((ret != 0), ret, msg)
-#define HASH_TABLE_ERROR_HELPER(ret, msg) GENERIC_ERROR_HELPER((ret == NULL), ret, msg)
 
 
 //user list typical element
