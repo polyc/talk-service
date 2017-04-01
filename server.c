@@ -13,12 +13,43 @@
 #include <fcntl.h>
 #include <semaphore.h>
 
-#include "server.h"
 #include "common.h"
+#include "server.h"
 #include "util.h"
 
 
 GHashTable* user_list;
+
+//transform a usr_list_elem_t in a string according to mod_command
+void* stringify_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command){
+  fprintf(stdout, "sono dentro la funzione di serializzazione\n");
+  *buf_out = "";
+  strcat(buf_out, &mod_command);
+  strcat(buf_out, "-");
+  strcat(buf_out, buf_username);
+  fprintf(stdout, "maremma maiala\n");
+
+
+  if(mod_command == DELETE){
+    strcat(buf_out ,"-\n");
+    return;
+  }
+  else if (mod_command == NEW){
+    fprintf(stdout, "%s\n", elem->client_ip);
+    strcat(buf_out, "-");
+    strcat(buf_out, elem->client_ip);
+    strcat(buf_out, "-");
+    fprintf(stdout, "%s\n", &(elem->a_flag));
+    strcat(buf_out, &(elem->a_flag));
+    strcat(buf_out, "-\n");
+    return;
+  }
+  else{//mod_command == MOD
+    strcat(buf_out, &(elem->a_flag));
+    strcat(buf_out, "-\n");
+    return;
+  }
+}
 
 //client-process/server-thread communication routine
 void* connection_handler(void* arg){
@@ -64,6 +95,7 @@ void* connection_handler(void* arg){
   pthread_exit(NULL);
 }
 
+//list changes communication routine
 void* sender_routine(void* arg){
   sender_thread_args_t* args = (sender_thread_args_t*)arg;
 
@@ -94,7 +126,6 @@ void* sender_routine(void* arg){
 
   fprintf(stderr, "flag 14\n");
 
-  fprintf(stdout, "prova\n");
   //sending #mod
   while (bytes_left > 0){
       ret = send(socket_desc, buf + bytes_sent, bytes_left, 0);
@@ -102,25 +133,33 @@ void* sender_routine(void* arg){
       if (ret == -1 && errno == EINTR){
         continue;
       }
-      ERROR_HELPER(ret, "Error while sending username to server");
+      ERROR_HELPER(ret, "Error while sending number of modifications to server");
 
       bytes_left -= ret;
       bytes_sent += ret;
   }
   bzero(buf, USERLIST_BUFF_SIZE);
 
-  char* test_username = calloc(8, sizeof(char));
+  char* test_username = (char*)calloc(8, sizeof(char));
   memcpy(test_username, "fulco_94", 8);
 
 
   //retreiving user information from hash table
   usr_list_elem_t* element = (usr_list_elem_t*)LOOKUP(user_list, (gconstpointer)test_username);
+
   fprintf(stdout,"%s\n", element->client_ip);
   fprintf(stdout, "%c\n", element->a_flag);
   fprintf(stderr, "flag 16\n");
 
-  //sendig user data to client
-  buf = "m-fulco_94-127.0.0.1-a-\n";
+  char mod_command = 'm';
+  fprintf(stdout, "%c\n", mod_command);
+
+  //serializing user element
+  stringify_user_element(buf, element, test_username, mod_command);
+  fprintf(stdout, "%s\n", buf);
+  free(test_username);
+
+  //sending user data to client;
   bytes_left = strlen(buf);
   bytes_sent = 0;
 
