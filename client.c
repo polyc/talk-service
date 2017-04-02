@@ -57,7 +57,7 @@ static void print_userList(gpointer key, gpointer elem, gpointer data){
 
   usr_list_elem_t* usr_elem = (usr_list_elem_t*)elem;
 
-  fprintf(stdout, "###############################################\n");
+  fprintf(stdout, "\n###############################################\n");
   fprintf(stdout, "Username: %s\n", username);
   fprintf(stdout, "IP:       %s\n", usr_elem->client_ip);
 
@@ -68,7 +68,7 @@ static void print_userList(gpointer key, gpointer elem, gpointer data){
     fprintf(stdout, "Flag:     UNAVAILABLE\n");
   }
 
-  fprintf(stdout, "###############################################\n");
+  fprintf(stdout, "###############################################\n\n");
   fflush(stdout);
   return;
 }
@@ -105,8 +105,13 @@ int get_username(char* username){
 void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command){
 
   //distiguere tra modify new e delete se e' modify usare LOOKUP
-  if(mod_command[0] == MODIFY || mod_command[0] == NEW){
+  if(mod_command[0] == NEW){
     REPLACE(user_list, (gpointer)buf_userName, (gpointer)elem);
+    return;
+  }
+  else if(mod_command[0] == MODIFY){
+    usr_list_elem_t* element = (usr_list_elem_t*)LOOKUP(user_list, (gconstpointer)buf_userName);
+    element->a_flag = elem->a_flag;
     return;
   }
   else{
@@ -145,22 +150,22 @@ void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName,
   elem->client_ip[j-i-1] = '\0';
 
   //checking availability char
-  /*
+
   if(buf[j] == AVAILABLE){
     elem->a_flag = AVAILABLE;
   }
   else{
     elem->a_flag = UNAVAILABLE;
   }
-  */
 
-  elem->a_flag = buf[j];
+
+  //elem->a_flag = buf[j];
 
   //checking if parsing done right
-  fprintf(stdout, "[CHECK USERNAME] %s\n", buf_userName);
-  fprintf(stdout, "[CHECK IP] %s\n", elem->client_ip);
+  fprintf(stdout, "[CHECK USERNAME]     %s\n", buf_userName);
+  fprintf(stdout, "[CHECK IP]           %s\n", elem->client_ip);
   fprintf(stdout, "[CHECK AVAILABILITY] %c\n", elem->a_flag);
-  fprintf(stdout, "[CHECK COMMAND] %s\n", mod_command);
+  fprintf(stdout, "[CHECK COMMAND]      %s\n", mod_command);
 
   return;
 

@@ -1,3 +1,3 @@
 # !/bin/bash
 
-valgrind --leak-check=yes ./server
+valgrind --leak-check=full --show-leak-kinds=all ./server
