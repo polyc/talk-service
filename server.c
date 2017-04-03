@@ -17,8 +17,10 @@
 #include "server.h"
 #include "util.h"
 
-sem_t sync_cnnHandler_sender;
+sem_t sync_cnnHandler_sender; // sync between connection handler thread and its sender thread ONE FOR EACH THREAD IN NEAR FUTURE
 GHashTable* user_list;
+GHashTable* thread_ref;
+
 
 //transform a usr_list_elem_t in a string according to mod_command
 void stringify_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command){
@@ -174,8 +176,8 @@ int main(int argc, char const *argv[]) {
   //generating server userlist
   user_list = usr_list_init();
 
-  //generating thread data structure
-  GHashTable* thread_ref = thread_ref_init();
+  //generating server thread manipulation hash table
+  thread_ref = thread_ref_init();
 
   //init sync_cnnHandler_sender
   ret = sem_init(&sync_cnnHandler_sender, 0, 1);
@@ -244,12 +246,8 @@ int main(int argc, char const *argv[]) {
       memcpy(thread_args->client_user_name, buf, strlen(buf));
       free(buf);//free of username buffer
 
-      //allocation of memory for hash table
-      int* thread_id = (int*)malloc(sizeof(int));
-      *(thread_id) = thread_count;
-
-      //insertion of thread i into hash-table with its args as value
-      INSERT(thread_ref, (gpointer)thread_id, (gpointer)thread_args);
+      //insertion of thread i into hash-table with its syncing semaphore needed to access userlist
+      //INSERT(thread_ref, (gpointer)thread_args->client_user_name, (gpointer));
 
       fprintf(stderr, "[MAIN]: thread id inserito nella hash table dei thread\n");
 

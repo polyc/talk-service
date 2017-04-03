@@ -57,6 +57,6 @@ GHashTable* usr_list_init(){
 }
 
 GHashTable* thread_ref_init(){
-  GHashTable* list = g_hash_table_new(g_int_hash, g_int_equal);
+  GHashTable* list = g_hash_table_new(g_str_hash, g_str_equal);
   return list;
 }
