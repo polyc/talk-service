@@ -22,13 +22,13 @@ GHashTable* user_list;
 
 //transform a usr_list_elem_t in a string according to mod_command
 void stringify_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command){
-  fprintf(stdout, "sono dentro la funzione di serializzazione\n");
+  fprintf(stdout, "[SENDER THREAD]: sono dentro la funzione di serializzazione\n");
   *buf_out = "";
   buf_out[0] = mod_command;
   //strcat(buf_out, &mod_command);
   strcat(buf_out, "-");
   strcat(buf_out, buf_username);
-  fprintf(stdout, "maremma maiala\n");
+  fprintf(stdout, "[SENDER THREAD]: maremma maiala\n");
 
 
   if(mod_command == DELETE){
@@ -36,11 +36,9 @@ void stringify_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_user
     return;
   }
   else if (mod_command == NEW){
-    fprintf(stdout, "%s\n", elem->client_ip);
     strcat(buf_out, "-");
     strcat(buf_out, elem->client_ip);
     strcat(buf_out, "-");
-    fprintf(stdout, "%s\n", &(elem->a_flag));
     strcat(buf_out, &(elem->a_flag));
     strcat(buf_out, "-\n");
     return;
@@ -72,7 +70,7 @@ void* connection_handler(void* arg){
   size_t u_command_len = strlen(u_command);
   */
 
-  fprintf(stderr, "flag 2\n");
+  fprintf(stderr, "[CONNECTION THREAD]: allocazione user element da inserire nella lista\n");
 
   //user list element
   usr_list_elem_t* element = (usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
@@ -85,6 +83,8 @@ void* connection_handler(void* arg){
   //inserting user into hash-table userlist
   ret = INSERT(user_list, (gpointer)args->client_user_name, (gpointer)element);
   if(ret == 0) fprintf(stdout, "yet present\n");
+
+  fprintf(stderr, "[CONNECTION THREAD]: elemento inserito con successo\n");
   while(1){}
 
   fprintf(stderr, "flag 10\n");
@@ -101,14 +101,14 @@ void* connection_handler(void* arg){
 void* sender_routine(void* arg){
   sender_thread_args_t* args = (sender_thread_args_t*)arg;
 
-  fprintf(stderr, "flag 11\n");
+  fprintf(stderr, "[SENDER THREAD]: inizializzazione indirizzo thread receiver\n");
 
   struct sockaddr_in rec_addr = {0};
   rec_addr.sin_family         = AF_INET;
   rec_addr.sin_port           = htons(CLIENT_THREAD_RECEIVER_PORT);
   rec_addr.sin_addr.s_addr    = inet_addr(LOCAL_IP);
 
-  fprintf(stderr, "flag 12\n");
+  fprintf(stderr, "[SENDER THREAD]: indirizzo thread receiver inizializzato con successo\n");
 
   int ret, bytes_left, bytes_sent = 0;
 
@@ -118,28 +118,18 @@ void* sender_routine(void* arg){
   ret = connect(socket_desc, (struct sockaddr*) &rec_addr, sizeof(struct sockaddr_in));
   ERROR_HELPER(ret, "Error trying to connect to client receiver thread");
 
-  fprintf(stderr, "flag 13\n");
+  fprintf(stderr, "[SENDER THREAD]: conneso al receiver thread\n");
 
   //sending test buffer
   char* buf= (char*)calloc(USERLIST_BUFF_SIZE, sizeof(char));
   buf[0] = '1';
   buf[1] = '\n';
-  bytes_left = 2;
+  //bytes_left = 2;
 
-  fprintf(stderr, "flag 14\n");
+  fprintf(stderr, "[SENDER THREAD]: allocato e preparato buffer di invio\n");
 
-  //sending #mod
-  while (bytes_left > 0){
-      ret = send(socket_desc, buf + bytes_sent, bytes_left, 0);
-      fprintf(stderr, "flag 15\n");
-      if (ret == -1 && errno == EINTR){
-        continue;
-      }
-      ERROR_HELPER(ret, "Error while sending number of modifications to server");
-
-      bytes_left -= ret;
-      bytes_sent += ret;
-  }
+  send_msg(socket_desc, buf);
+  fprintf(stderr, "[SENDER THREAD]: #modifiche inviate con successo\n");
   bzero(buf, USERLIST_BUFF_SIZE);
 
   char* test_username = (char*)calloc(8, sizeof(char));
@@ -149,45 +139,27 @@ void* sender_routine(void* arg){
   //retreiving user information from hash table
   usr_list_elem_t* element = (usr_list_elem_t*)LOOKUP(user_list, (gconstpointer)test_username);
 
-  fprintf(stdout,"%s\n", element->client_ip);
-  fprintf(stdout, "%c\n", element->a_flag);
-  fprintf(stderr, "flag 16\n");
+  fprintf(stdout, "[SENDER THREAD][USERNAME]: %s\n", test_username);
+  fprintf(stdout,"[SENDER THREAD][IP]: %s\n", element->client_ip);
+  fprintf(stdout, "[SENDER THREAD][FLAG]: %c\n", element->a_flag);
 
   char mod_command = 'n';
-  fprintf(stdout, "%c\n", mod_command);
 
   //serializing user element
   stringify_user_element(buf, element, test_username, mod_command);
-  fprintf(stdout, "%s\n", buf);
+  fprintf(stdout, "[SENDER THREAD]: sono fuori la funzione di serializzazione\n");
+  fprintf(stdout, "[SENDER THREAD][BUFFER READY]:%s\n", buf);
   free(test_username);
 
   //sending user data to client;
-  bytes_left = strlen(buf);
-  bytes_sent = 0;
-
-  fprintf(stderr, "flag 17\n");
-
-  while (bytes_left > 0){
-      ret = send(socket_desc, buf + bytes_sent, bytes_left, 0);
-
-      fprintf(stderr, "flag 17\n");
-
-      if (ret == -1 && errno == EINTR){
-        continue;
-      }
-      ERROR_HELPER(ret, "Error while sending serialized user to server");
-
-      bytes_left -= ret;
-      bytes_sent += ret;
-  }
-
-  fprintf(stderr, "flag 18\n");
+  send_msg(socket_desc, buf);
+  fprintf(stderr, "[SENDER THREAD]: user element inviato con successo\n");
 
   ret = close(socket_desc);
   ERROR_HELPER(ret, "Error closing socket_desc in sender routine");
 
   //free(buf);
-  fprintf(stdout, "end sender routine\n");
+  fprintf(stdout, "[SENDER THREAD]: routine exit point\n");
   pthread_exit(NULL);
 }
 
@@ -227,7 +199,7 @@ int main(int argc, char const *argv[]) {
   // we allocate client_addr dynamically and initialize it to zero
   struct sockaddr_in* client_addr = calloc(1, sizeof(struct sockaddr_in));
 
-  fprintf(stderr, "flag 0\n");
+  fprintf(stderr, "[MAIN]: fine inizializzazione, entro nel while di accettazione\n");
 
   // loop to manage incoming connections spawning handler threads
     while (1) {
@@ -235,7 +207,7 @@ int main(int argc, char const *argv[]) {
       if (client_desc == -1 && errno == EINTR) continue; // check for interruption by signals
       ERROR_HELPER(client_desc, "Cannot open socket for incoming connection");
 
-      fprintf(stderr, "flag 1\n");
+      fprintf(stderr, "[MAIN]: connessione accettata\n");
 
       //parsing client ip in dotted form
       char* client_ip_buf = inet_ntoa(client_addr->sin_addr);
@@ -256,9 +228,9 @@ int main(int argc, char const *argv[]) {
       ERROR_HELPER(ret, "client closed the socket");
 
       //print test
-      fprintf(stdout, "%s\n",buf);
+      fprintf(stdout, "[MAIN]: username: %s\n",buf);
 
-      fprintf(stderr, "flag4");
+      fprintf(stderr, "[MAIN]: ricezione username completata con successo\n");
       //copying username into struct
       memcpy(thread_args->client_user_name, buf, strlen(buf));
       free(buf);//free of username buffer
@@ -270,9 +242,7 @@ int main(int argc, char const *argv[]) {
       //insertion of thread i into hash-table with its args as value
       INSERT(thread_ref, (gpointer)thread_id, (gpointer)thread_args);
 
-      fprintf(stderr, "flag5");
-
-      fprintf(stderr, "flag6");
+      fprintf(stderr, "[MAIN]: thread id inserito nella hash table dei thread\n");
 
       pthread_t thread_client;
       ret = pthread_create(&thread_client, NULL, connection_handler, (void*)thread_args);
@@ -282,18 +252,18 @@ int main(int argc, char const *argv[]) {
       PTHREAD_ERROR_HELPER(ret, "Could not detach thread");
 
 
-      fprintf(stderr, "flag7");
+      fprintf(stderr, "[MAIN]:spawnato connection thread per il client accettato\n");
 
       //sender thread args and spawning
       sender_thread_args_t* sender_args = (sender_thread_args_t*)malloc(sizeof(sender_thread_args_t));
 
-      fprintf(stderr, "flag8");
+      fprintf(stderr, "[MAIN]: allocati argomenti per il sender thread\n");
 
       pthread_t thread_sender;
       ret = pthread_create(&thread_sender, NULL, sender_routine, (void*)sender_args);
       PTHREAD_ERROR_HELPER(ret, "Could not create sender thread");
 
-      fprintf(stderr, "flag9");
+      fprintf(stderr, "[MAIN]: spawnato sender thread\n");
 
       //new buffer for new incoming connection
       client_addr = calloc(1, sizeof(struct sockaddr_in));
@@ -302,6 +272,8 @@ int main(int argc, char const *argv[]) {
 
       ret = pthread_detach(thread_sender);
       PTHREAD_ERROR_HELPER(ret, "Could not detach thread");
+
+      fprintf(stderr, "[MAIN]: fine loop di accettazione connessione in ingresso, inizio nuova iterazione\n");
     }
 
     exit(EXIT_SUCCESS);
