@@ -301,9 +301,7 @@ void* usr_list_recv_thread_routine(void* args){
 
 } //end of thread routine
 
-void chat_session(int socket, struct sockaddr_in*, int method){
-
-}
+void chat_session(int socket, struct sockaddr_in*, int method){}
 
 void* connect_routine(void* args){
 
@@ -405,7 +403,7 @@ int main(int argc, char* argv[]){
 
   fprintf(stderr, "flag 1\n");
 
-/*
+  /*
   //socket descriptor for listen thread
   int socket_listen_thread_desc = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(socket_listen_thread_desc, "Error while creating client listen socket descriptor");
@@ -414,7 +412,7 @@ int main(int argc, char* argv[]){
   struct sockaddr_in incoming_client_addr = {0};
   serv_addr.sin_family              = AF_INET;
   serv_addr.sin_port                = htons(CLIENT_THREAD_LISTEN_PORT);
-*/
+  */
 
   //socket descriptor for user list receiver thread
   int usrl_recv_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -423,7 +421,7 @@ int main(int argc, char* argv[]){
 
 
 
-/*
+  /*
   //thread listen
   //
   //creating parameters for listen thread funtion
@@ -441,7 +439,7 @@ int main(int argc, char* argv[]){
   PTHREAD_ERROR_HELPER(ret, "Unable to detatch from listen_thread");
   //
   //detached from thread listen
-*/
+  */
 
 
   //user list receiver thread
