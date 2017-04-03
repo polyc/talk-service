@@ -17,8 +17,10 @@
 #include "server.h"
 #include "util.h"
 
-
+sem_t sync_cnnHandler_sender; // sync between connection handler thread and its sender thread ONE FOR EACH THREAD IN NEAR FUTURE
 GHashTable* user_list;
+GHashTable* thread_ref;
+
 
 //transform a usr_list_elem_t in a string according to mod_command
 void stringify_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command){
@@ -83,8 +85,10 @@ void* connection_handler(void* arg){
   //inserting user into hash-table userlist
   ret = INSERT(user_list, (gpointer)args->client_user_name, (gpointer)element);
   if(ret == 0) fprintf(stdout, "yet present\n");
-
   fprintf(stderr, "[CONNECTION THREAD]: elemento inserito con successo\n");
+  ret = sem_post(&sync_cnnHandler_sender);
+  ERROR_HELPER(ret, "cannot post on sync_cnnHandler_sender");
+
   while(1){}
 
   fprintf(stderr, "flag 10\n");
@@ -135,8 +139,9 @@ void* sender_routine(void* arg){
   char* test_username = (char*)calloc(8, sizeof(char));
   memcpy(test_username, "fulco_94", 8);
 
-
   //retreiving user information from hash table
+  ret = sem_wait(&sync_cnnHandler_sender);
+  ERROR_HELPER(ret, "cannot wait on sync_cnnHandler_sender");
   usr_list_elem_t* element = (usr_list_elem_t*)LOOKUP(user_list, (gconstpointer)test_username);
 
   fprintf(stdout, "[SENDER THREAD][USERNAME]: %s\n", test_username);
@@ -150,6 +155,8 @@ void* sender_routine(void* arg){
   fprintf(stdout, "[SENDER THREAD]: sono fuori la funzione di serializzazione\n");
   fprintf(stdout, "[SENDER THREAD][BUFFER READY]:%s\n", buf);
   free(test_username);
+  ret = sem_post(&sync_cnnHandler_sender);
+  ERROR_HELPER(ret, "cannot post on sync_cnnHandler_sender");
 
   //sending user data to client;
   send_msg(socket_desc, buf);
@@ -169,8 +176,12 @@ int main(int argc, char const *argv[]) {
   //generating server userlist
   user_list = usr_list_init();
 
-  //generating thread data structure
-  GHashTable* thread_ref = thread_ref_init();
+  //generating server thread manipulation hash table
+  thread_ref = thread_ref_init();
+
+  //init sync_cnnHandler_sender
+  ret = sem_init(&sync_cnnHandler_sender, 0, 1);
+  ERROR_HELPER(ret, "[FATAL ERROR] Could not init sync_cnnHandler_sender semaphore");
 
   struct sockaddr_in server_addr = {0};
   int sockaddr_len = sizeof(struct sockaddr_in);
@@ -235,15 +246,14 @@ int main(int argc, char const *argv[]) {
       memcpy(thread_args->client_user_name, buf, strlen(buf));
       free(buf);//free of username buffer
 
-      //allocation of memory for hash table
-      int* thread_id = (int*)malloc(sizeof(int));
-      *(thread_id) = thread_count;
-
-      //insertion of thread i into hash-table with its args as value
-      INSERT(thread_ref, (gpointer)thread_id, (gpointer)thread_args);
+      //insertion of thread i into hash-table with its syncing semaphore needed to access userlist
+      //INSERT(thread_ref, (gpointer)thread_args->client_user_name, (gpointer));
 
       fprintf(stderr, "[MAIN]: thread id inserito nella hash table dei thread\n");
 
+      //connection handler thread spawning
+      ret = sem_wait(&sync_cnnHandler_sender);
+      ERROR_HELPER(ret, "cannot wait on sync_cnnHandler_sender");
       pthread_t thread_client;
       ret = pthread_create(&thread_client, NULL, connection_handler, (void*)thread_args);
       PTHREAD_ERROR_HELPER(ret, "Could not create a new thread");
