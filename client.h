@@ -1,5 +1,8 @@
 #include "common.h"
 
+#define CONNECT 1
+#define RECEIVE 0
+
 typedef struct receiver_thread_args_s{
   int socket;
 }receiver_thread_args_t;  //change name beacuse used both by lsiten_thread and usrl_recv_thread

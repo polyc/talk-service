@@ -18,6 +18,7 @@
 #include "util.h"
 
 sem_t sync_receiver;
+sem_t sync_userList;
 GHashTable* user_list;
 
 
@@ -104,18 +105,33 @@ int get_username(char* username){
 
 void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command){
 
+  ret = sem_wait(&sync_userList);
+  ERROR_HELPER(ret, "Error in wait function on sync_userList semaphore\n");
+
   //distiguere tra modify new e delete se e' modify usare LOOKUP
   if(mod_command[0] == NEW){
     REPLACE(user_list, (gpointer)buf_userName, (gpointer)elem);
+
+    ret = sem_post(&sync_userList);
+    ERROR_HELPER(ret, "Error in post function on sync_userList semaphore\n");
+
     return;
   }
   else if(mod_command[0] == MODIFY){
     usr_list_elem_t* element = (usr_list_elem_t*)LOOKUP(user_list, (gconstpointer)buf_userName);
     element->a_flag = elem->a_flag;
+
+    ret = sem_post(&sync_userList);
+    ERROR_HELPER(ret, "Error in post function on sync_userList semaphore\n");
+
     return;
   }
   else{
     REMOVE(user_list, (gpointer)buf_userName);
+
+    ret = sem_post(&sync_userList);
+    ERROR_HELPER(ret, "Error in post function on sync_userList semaphore\n");
+
     return;
   }
 
@@ -171,8 +187,7 @@ void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName,
 
 }
 
-
-void* usr_list_recv_thread_routine(void *args){
+void* usr_list_recv_thread_routine(void* args){
 
   int ret;
 
@@ -180,7 +195,7 @@ void* usr_list_recv_thread_routine(void *args){
   receiver_thread_args_t* arg = (receiver_thread_args_t*)args;
 
   //address structure for user list sender thread
-  struct sockaddr_in* usrl_sender_address = calloc(1, sizeof(struct sockaddr_in));
+  struct sockaddr_in* usrl_sender_address = (sockaddr_in*)calloc(1, sizeof(struct sockaddr_in));
   socklen_t usrl_sender_address_len = sizeof(usrl_sender_address);
 
 
@@ -255,7 +270,7 @@ void* usr_list_recv_thread_routine(void *args){
 
       //creating buffer for username and command to pass to create_elem_list function
       char* userName = (char*)calloc(USERNAME_BUF_SIZE,sizeof(char));
-      char* command = (char*)calloc(1,sizeof(char));
+      char* command = (char*)calloc(1,sizeof(char)); //ricordare che hai cambiato prima era una calloc
 
       fprintf(stderr, "flag 9\n");
 
@@ -286,6 +301,72 @@ void* usr_list_recv_thread_routine(void *args){
 
 } //end of thread routine
 
+void chat_session(int socket, struct sockaddr_in*, int method){
+
+}
+
+void* connect_routine(void* args){
+
+  int ret;
+
+  receiver_thread_args_t* arg = (receiver_thread_args_t*)args;
+
+  //while(1){ //start of while(1)
+    ret = sem_wait(&sync_userList);
+    ERROR_HELPER(ret, "Error in wait function on sync_userList semaphore\n");
+
+    FOR_EACH(user_list, print_userList, NULL); //printing hashtable
+
+    ret = sem_post(&sync_userList);
+    ERROR_HELPER(ret, "Error in post function on sync_userList semaphore\n");
+
+    //buffer for target to connect to
+    char* target = (char*)malloc(USERNAME_BUF_SIZE*sizeof(char));
+
+    //letting user decide who to connect to
+    fprintf(stdout, "Insert username to connect to: ");
+    fflush(stdout);
+    fgets(target, sizeof(target+1), stdin);
+    fflush(stdin);
+
+    //getting information of the target
+    usr_list_elem_t* target_elem;
+
+    //checking for correct username to connect to
+    while(1){
+
+      ret = sem_wait(&sync_userList);
+      ERROR_HELPER(ret, "Error in wait function on sync_userList semaphore\n");
+
+      target_elem = (usr_list_elem_t*)LOOKUP(user_list, (gconstpointer)target);
+
+      if(target_elem != NULL){
+        if(target_elem->a_flag == UNAVAILABLE){
+          fprintf(stdout, "Client non available...choose another one\n");
+          continue;
+        }
+
+        ret = sem_post(&sync_userList);
+        ERROR_HELPER(ret, "Error in post function on sync_userList semaphore\n");
+
+        break;
+      }
+      fprintf(stdout, "Username not found...insert correct and existing username to connect to\n");
+    }
+
+    //creating struct for target connection
+    struct sockaddr_in* target_addr = (sockaddr_in*)calloc(1,sizeof(struct sockaddr_in));
+    target_addr.sin_family         = AF_INET;
+    target_addr.sin_port           = htons(CLIENT_THREAD_LISTEN_PORT);
+    target_addr.sin_addr.s_addr    = inet_addr(target_elem->client_ip);
+
+    chat_session(arg->socket, target_addr, CONNECT);
+
+  //} //end of while(1)
+
+  return;
+
+}
 
 int main(int argc, char* argv[]){
 
@@ -338,6 +419,7 @@ int main(int argc, char* argv[]){
   //socket descriptor for user list receiver thread
   int usrl_recv_socket = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(usrl_recv_socket, "Error while creating user list receiver thread socket descriptor");
+
 
 
 
@@ -404,12 +486,33 @@ int main(int argc, char* argv[]){
   PTHREAD_ERROR_HELPER(ret, "Unable to detatch from user list receiver thread");
   //
   //detached from user list receiver thread
+
   fprintf(stderr, "flag 4\n");
 
   //print elemets from user list ONLY FOR TEST
   //fprintf(stdout, "Found regibald? %d\n", CONTAINS(user_list, "regibald_94"));
 
-  FOR_EACH(user_list, print_userList, NULL); //printing hashtable
+  //FOR_EACH(user_list, print_userList, NULL); //printing hashtable
+
+  //creating sempahore for mutual exlusion in userList
+  ret = sem_init(&sync_userList, 0, 1);
+  ERROR_HELPER(ret, "[FATAL ERROR] Could not open &sync_userList semaphore");
+
+  //connect thread
+  //
+  //socket descriptor for connect thread
+  int connect_socket = socket(AF_INET, SOCK_STREAM, 0);
+  ERROR_HELPER(connect_socket, "Error while creating connect thread socket descriptor");
+
+  //creating parameters for connect thread funtion
+  receiver_thread_args_t* connect_thread_args = (receiver_thread_args_t*)malloc(sizeof(receiver_thread_args_t));
+  usrl_recv_args->socket = connect_socket;
+
+  pthread_t connect_thread;
+  ret = pthread_create(&connect_thread, NULL, connect_routine, (void*)connect_thread_args);
+  PTHREAD_ERROR_HELPER(ret, "Unable to create connect thread");
+  //
+  //
 
   fprintf(stderr, "flag 4.1\n");
 
