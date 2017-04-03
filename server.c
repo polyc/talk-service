@@ -143,6 +143,10 @@ void* sender_routine(void* arg){
   ret = sem_wait(&sync_cnnHandler_sender);
   ERROR_HELPER(ret, "cannot wait on sync_cnnHandler_sender");
   usr_list_elem_t* element = (usr_list_elem_t*)LOOKUP(user_list, (gconstpointer)test_username);
+  if(element == NULL){
+    ret = -1;
+    ERROR_HELPER(ret, "[SENDER THREAD]user not present in list");
+  }
 
   fprintf(stdout, "[SENDER THREAD][USERNAME]: %s\n", test_username);
   fprintf(stdout,"[SENDER THREAD][IP]: %s\n", element->client_ip);
