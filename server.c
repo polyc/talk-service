@@ -41,8 +41,7 @@ void receive_and_execute_command(thread_args_t* args, char* buf_command){
       //thread's close operations;
       break;//never executed beacuse in close operations, the thread exit safely
     default :
-      ret = -1;
-      ERROR_HELPER(ret, "[CONNECTION THREAD]: server command not found");
+      break;
   }
   return;
 }
@@ -103,10 +102,10 @@ void* connection_handler(void* arg){
   ERROR_HELPER(ret, "cannot post on mutex_cnnHandler_sender");
 
   //command receiver buffer
-  char buf_command = 0;
+  char* buf_command = (char*)calloc(1, sizeof(char));
 
   while(1){
-    receive_and_execute_command(args, &buf_command);
+    receive_and_execute_command(args, buf_command);
   }
   /*CLOSE OPERATIONS (TO BE WRITTEN IN A FUNCTION)
   ret = close(args->socket);//close client_desc
