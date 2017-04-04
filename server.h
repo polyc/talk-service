@@ -5,7 +5,7 @@
 typedef struct thread_args_s{
   int socket;
   char* client_ip;
-  char* client_user_name; //key of thread hash table 
+  char* client_user_name; //key for both hash table
 } thread_args_t;
 
 typedef struct sender_thread_args_s{
@@ -16,3 +16,4 @@ typedef struct sender_thread_args_s{
 void* connection_handler(void* arg);
 void* sender_routine(void* arg);
 void stringify_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command);
+void receive_and_execute_command(thread_args_t* args, char* buf_command);
