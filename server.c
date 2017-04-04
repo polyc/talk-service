@@ -22,11 +22,11 @@ GHashTable* user_list;
 GHashTable* thread_ref;
 
 void receive_and_execute_command(thread_args_t* args, char* buf_command){
-  int ret = recv_msg(args->socket, &buf_command, 1);
+  int ret = recv_msg(args->socket, buf_command, 1);
   ERROR_HELPER(ret, "cannot receive server command from client");
 
   //selecting correct command
-  switch(buf_command){
+  switch(*buf_command){
     case UNAVAILABLE :
       //update hash table;
       //queue insertion;
@@ -41,7 +41,7 @@ void receive_and_execute_command(thread_args_t* args, char* buf_command){
       //thread's close operations;
       break;//never executed beacuse in close operations, the thread exit safely
     default :
-      ret = -1
+      ret = -1;
       ERROR_HELPER(ret, "[CONNECTION THREAD]: server command not found");
   }
   return;
@@ -103,10 +103,10 @@ void* connection_handler(void* arg){
   ERROR_HELPER(ret, "cannot post on mutex_cnnHandler_sender");
 
   //command receiver buffer
-  char buf_command = '';
+  char buf_command = 0;
 
   while(1){
-    receive_and_execute_command(args, buf_command);
+    receive_and_execute_command(args, &buf_command);
   }
   /*CLOSE OPERATIONS (TO BE WRITTEN IN A FUNCTION)
   ret = close(args->socket);//close client_desc
