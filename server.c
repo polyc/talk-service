@@ -41,7 +41,6 @@ void receive_and_execute_command(thread_args_t* args, char* buf_command){
       //thread's close operations;
       break;//never executed beacuse in close operations, the thread exit safely
     default :
-      break;
   }
   return;
 }
