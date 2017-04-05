@@ -17,9 +17,29 @@
 #include "server.h"
 #include "util.h"
 
-sem_t mutex_cnnHandler_sender; // sync between connection handler thread and its sender thread ONE FOR EACH THREAD IN NEAR FUTURE
+sem_t user_list_mutex; // mutual exclusion to acces user list hash-table
 GHashTable* user_list;
 GHashTable* thread_ref;
+
+//function called by FOR_EACH. It send single user element to receiver thread in client
+GHFunc send_list_on_client_connection(gpointer key, gpointer value, gpointer user_data){
+  int ret = sem_wait(&user_list_mutex);
+  ERROR_HELPER(ret, "[SENDING LIST]: cannot wait on user_list_mutex");
+
+  char* buf = calloc(USERNAME_BUF_SIZE, sizeof(char));
+  stringify_user_element(buf, value, key, NEW);
+
+  fprintf(stdout, "[SENDING LIST][USERNAME]: %s\n", (char*)key);
+  fprintf(stdout,"[SENDING LIST][IP]: %s\n", (char*)((usr_list_elem_t*)value)->client_ip);
+  fprintf(stdout, "[SENDING LIST][FLAG]: %c\n", (char)((usr_list_elem_t*)value)->a_flag);
+
+  send_msg(*((int*)user_data), buf); //(socket, buf);
+  free(buf);
+
+  ret = sem_post(&user_list_mutex);
+  ERROR_HELPER(ret, "[SENDING LIST]: cannot post on user_list_mutex");
+  return;
+}
 
 void receive_and_execute_command(thread_args_t* args, char* buf_command){
   int ret = recv_msg(args->socket, buf_command, 1);
@@ -95,11 +115,24 @@ void* connection_handler(void* arg){
   element->a_flag = AVAILABLE;
 
   //inserting user into hash-table userlist
+  ret = sem_wait(&user_list_mutex);
+  ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
+
   ret = INSERT(user_list, (gpointer)args->client_user_name, (gpointer)element);
-  if(ret == 0) fprintf(stdout, "[CONNECTION THREAD]: user is already in list\n");
+  if(ret == 0){
+    fprintf(stdout, "[CONNECTION THREAD]: user is already in list\n");
+    pthread_exit(NULL);
+  }
   fprintf(stderr, "[CONNECTION THREAD]: elemento inserito con successo\n");
-  ret = sem_post(&mutex_cnnHandler_sender);
-  ERROR_HELPER(ret, "cannot post on mutex_cnnHandler_sender");
+
+  ret = sem_post(&user_list_mutex);
+  ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
+
+  //unlock sender thread
+  //retrieving semphore
+  sem_t* sem = (sem_t*)LOOKUP(thread_ref, args->client_user_name);
+  ret = sem_post(sem);
+  ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot post on chandler_sender_sync");
 
   //command receiver buffer
   char* buf_command = (char*)calloc(1, sizeof(char));
@@ -118,6 +151,8 @@ void* connection_handler(void* arg){
 
 //list changes communication routine
 void* sender_routine(void* arg){
+  int ret;
+
   sender_thread_args_t* args = (sender_thread_args_t*)arg;
 
   fprintf(stderr, "[SENDER THREAD]: inizializzazione indirizzo thread receiver\n");
@@ -129,8 +164,6 @@ void* sender_routine(void* arg){
 
   fprintf(stderr, "[SENDER THREAD]: indirizzo thread receiver inizializzato con successo\n");
 
-  int ret, bytes_left, bytes_sent = 0;
-
   int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(socket_desc, "Cannot create sender thread socket");
 
@@ -139,52 +172,14 @@ void* sender_routine(void* arg){
 
   fprintf(stderr, "[SENDER THREAD]: conneso al receiver thread\n");
 
-  //sending test buffer
-  char* buf= (char*)calloc(USERLIST_BUFF_SIZE, sizeof(char));
-  buf[0] = '1';
-  buf[1] = '\n';
-  //bytes_left = 2;
-
-  fprintf(stderr, "[SENDER THREAD]: allocato e preparato buffer di invio\n");
-
-  send_msg(socket_desc, buf);
-  fprintf(stderr, "[SENDER THREAD]: #modifiche inviate con successo\n");
-  bzero(buf, USERLIST_BUFF_SIZE);
-
-  char* test_username = (char*)calloc(8, sizeof(char));
-  memcpy(test_username, "fulco_94", 8);
-
-  //retreiving user information from hash table
-  ret = sem_wait(&mutex_cnnHandler_sender);
-  ERROR_HELPER(ret, "cannot wait on mutex_cnnHandler_sender");
-  usr_list_elem_t* element = (usr_list_elem_t*)LOOKUP(user_list, (gconstpointer)test_username);
-  if(element == NULL){
-    ret = -1;
-    ERROR_HELPER(ret, "[SENDER THREAD]user not present in list");
-  }
-
-  fprintf(stdout, "[SENDER THREAD][USERNAME]: %s\n", test_username);
-  fprintf(stdout,"[SENDER THREAD][IP]: %s\n", element->client_ip);
-  fprintf(stdout, "[SENDER THREAD][FLAG]: %c\n", element->a_flag);
-
-  char mod_command = 'n';
-
-  //serializing user element
-  stringify_user_element(buf, element, test_username, mod_command);
-  fprintf(stdout, "[SENDER THREAD]: sono fuori la funzione di serializzazione\n");
-  fprintf(stdout, "[SENDER THREAD][BUFFER READY]:%s\n", buf);
-  free(test_username);
-  ret = sem_post(&mutex_cnnHandler_sender);
-  ERROR_HELPER(ret, "cannot post on mutex_cnnHandler_sender");
-
-  //sending user data to client;
-  send_msg(socket_desc, buf);
-  fprintf(stderr, "[SENDER THREAD]: user element inviato con successo\n");
+  ret = sem_wait(args->chandler_sender_sync);//aspetto che cHandler abbia inserito nella lista per eseguire l'invio completo
+  ERROR_HELPER(ret, "[SENDER THREAD]: cannot wait on chandler_sender_sync semaphore");
+  //sending list to client (thread safe)
+  FOR_EACH(user_list, (GHFunc)send_list_on_client_connection, (gpointer)&socket_desc);
 
   ret = close(socket_desc);
   ERROR_HELPER(ret, "Error closing socket_desc in sender routine");
 
-  //free(buf);
   fprintf(stdout, "[SENDER THREAD]: routine exit point\n");
   pthread_exit(NULL);
 }
@@ -198,9 +193,9 @@ int main(int argc, char const *argv[]) {
   //generating server thread manipulation hash table
   thread_ref = thread_ref_init();
 
-  //init mutex_cnnHandler_sender
-  ret = sem_init(&mutex_cnnHandler_sender, 0, 1);
-  ERROR_HELPER(ret, "[FATAL ERROR] Could not init mutex_cnnHandler_sender semaphore");
+  //init user_list_mutex
+  ret = sem_init(&user_list_mutex, 0, 1);
+  ERROR_HELPER(ret, "[FATAL ERROR] Could not init user_list_mutex semaphore");
 
   struct sockaddr_in server_addr = {0};
   int sockaddr_len = sizeof(struct sockaddr_in);
@@ -265,14 +260,7 @@ int main(int argc, char const *argv[]) {
       memcpy(thread_args->client_user_name, buf, strlen(buf));
       free(buf);//free of username buffer
 
-      //insertion of thread i into hash-table with its syncing semaphore needed to access userlist
-      //INSERT(thread_ref, (gpointer)thread_args->client_user_name, (gpointer));
-
-      fprintf(stderr, "[MAIN]: thread id inserito nella hash table dei thread\n");
-
       //connection handler thread spawning
-      ret = sem_wait(&mutex_cnnHandler_sender);
-      ERROR_HELPER(ret, "cannot wait on mutex_cnnHandler_sender");
       pthread_t thread_client;
       ret = pthread_create(&thread_client, NULL, connection_handler, (void*)thread_args);
       PTHREAD_ERROR_HELPER(ret, "Could not create a new thread");
@@ -280,13 +268,19 @@ int main(int argc, char const *argv[]) {
       ret = pthread_detach(thread_client);
       PTHREAD_ERROR_HELPER(ret, "Could not detach thread");
 
-
       fprintf(stderr, "[MAIN]:spawnato connection thread per il client accettato\n");
 
       //sender thread args and spawning
       sender_thread_args_t* sender_args = (sender_thread_args_t*)malloc(sizeof(sender_thread_args_t));
+      sender_args->chandler_sender_sync = (sem_t*)malloc(sizeof(sem_t));
+      ret = sem_init(sender_args->chandler_sender_sync, 0, 0);
+      ERROR_HELPER(ret, "[MAIN]:cannot init chandler_sender_sync sempahore");
 
       fprintf(stderr, "[MAIN]: allocati argomenti per il sender thread\n");
+
+      //inserting semphore in hash table. cHandler thread need to wait on this
+      INSERT(thread_ref, (gpointer)thread_args->client_user_name, (gpointer)sender_args->chandler_sender_sync);
+
 
       pthread_t thread_sender;
       ret = pthread_create(&thread_sender, NULL, sender_routine, (void*)sender_args);
