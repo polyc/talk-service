@@ -374,29 +374,30 @@ void* connect_routine(void* args){
       //letting user decide who to connect to
       fprintf(stdout, "[CONNECT_ROUTINE] Connect to: ");
       fflush(stdout);
-      fgets(target, sizeof(target+1), stdin);
+      fscanf(stdin, "%s", target);
       fflush(stdin);
 
       ret = sem_wait(&sync_userList);
       ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in wait function on sync_userList semaphore\n");
 
-      usr_list_elem_t* target_elem = (usr_list_elem_t*)LOOKUP(user_list, (gconstpointer)target);
+      target_elem = (usr_list_elem_t*)LOOKUP(user_list, (gconstpointer)target);
+
+      ret = sem_post(&sync_userList);
+      ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in post function on sync_userList semaphore\n");
 
       if(target_elem != NULL){
         if(target_elem->a_flag == UNAVAILABLE){
-          fprintf(stdout, "[CONNECT_ROUTINE] Client not available...choose another one\n");
+          fprintf(stdout, "[CONNECT_ROUTINE] Client not available...\n");
           fflush(stdout);
           continue;
         }
-
-        ret = sem_post(&sync_userList);
-        ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in post function on sync_userList semaphore\n");
-
         break;
       }
-      fprintf(stdout, "[CONNECT_ROUTINE] Username not found...insert correct and existing username\n");
+      fprintf(stdout, "[CONNECT_ROUTINE] Username [%s] not found...\n", target);
       fflush(stdout);
     }
+
+    fprintf(stdout, "[CONNECT_ROUTINE] Got username...creating struct for connection\n");
 
     //creating struct for target connection
     struct sockaddr_in target_addr = {0};
@@ -404,8 +405,12 @@ void* connect_routine(void* args){
     target_addr.sin_port           = htons(CLIENT_THREAD_LISTEN_PORT);
     target_addr.sin_addr.s_addr    = inet_addr(target_elem->client_ip);
 
+    fprintf(stdout, "[CONNECT_ROUTINE] Connecting to %s on ip: %s...\n", target, target_elem->client_ip);
+
     ret = connect(arg->socket, (struct sockaddr*) &target_addr, sizeof(struct sockaddr_in));
     ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error trying to connect to target");
+
+    fprintf(stdout, "[CONNECT_ROUTINE] Connected to %s passing arguments to chat_session\n", target);
 
     chat_session(target, arg->socket);
 
