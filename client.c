@@ -213,9 +213,9 @@ void* read_updates(void* args){
     fprintf(stdout, "[READ_UPDATES] inside while(1)\n");
     while(1){
 
-      elem_buf = (char*)g_async_queue_try_pop(buf);
+      //elem_buf = (char*)g_async_queue_try_pop(buf);
 
-      if(elem_buf != NULL){
+      if((elem_buf = (char*)g_async_queue_try_pop(buf)) != NULL){
         break;
       }
     }
@@ -388,7 +388,6 @@ void* connect_routine(void* args){
     ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in wait function on sync_userList semaphore\n");
 
     FOR_EACH(user_list, (GHFunc)print_userList, NULL); //printing hashtable
-    fprintf(stdout, "[CONNECT_ROUTINE] should print something\n");
 
     ret = sem_post(&sync_userList);
     ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in post function on sync_userList semaphore\n");
@@ -405,7 +404,9 @@ void* connect_routine(void* args){
       //letting user decide who to connect to
       fprintf(stdout, "[CONNECT_ROUTINE] Connect to: ");
 
-      fgets(target, USERNAME_BUF_SIZE+1, stdin);
+      fgets(target, USERNAME_BUF_SIZE, stdin);
+
+      strtok(target, "\n");
 
       ret = sem_wait(&sync_userList);
       ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in wait function on sync_userList semaphore\n");
