@@ -80,8 +80,8 @@ int get_username(char* username){
 
   fprintf(stdout, "[GET_USERNAME] Enter username: ");
   fflush(stdout);
-  fgets(username, sizeof(username)+1, stdin);
-  fflush(stdin);
+  username = fgets(username, USERNAME_BUF_SIZE, stdin);
+  //fflush(stdin);
 
   //checking if username has atleast 1 character
   if(strlen(username)==0){
@@ -98,8 +98,7 @@ int get_username(char* username){
       return 0; //contains '-' character, username not ok return 0
     }
   }
-
-  strcat(username, "\n"); //concatenating "\n" for server recv function
+  strcat(username, "\n");
 
   return 1; //usrname ok
 }
@@ -148,6 +147,8 @@ void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command){
 
 void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName, char* mod_command){
 
+  fprintf(stdout, "[PARSE_ELEM_LIST] inside parse_element function\n");
+
   int i, j;
 
   mod_command[0] = buf[0];
@@ -162,6 +163,8 @@ void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName,
   strncpy(buf_userName, buf+2, j-3);
   buf_userName[j-3] = '\0';
 
+  fprintf(stdout, "[PARSE_ELEM_LIST] passed first strncpy()\n");
+
   i = j;
 
   for(; j<42; j++){
@@ -173,6 +176,8 @@ void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName,
 
   strncpy(elem->client_ip, buf+i, j-i-1);
   elem->client_ip[j-i-1] = '\0';
+
+  fprintf(stdout, "[PARSE_ELEM_LIST] passed second strncpy()\n");
 
   //checking availability char
 
@@ -196,12 +201,66 @@ void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName,
 
 }
 
+void* read_updates(void* args){
+
+  fprintf(stdout, "[READ_UPDATES] inside function read_updates\n");
+
+  GAsyncQueue* buf = (GAsyncQueue*)args;
+
+  while(1){
+
+    char* elem_buf;
+    fprintf(stdout, "[READ_UPDATES] inside while(1)\n");
+    while(1){
+
+      elem_buf = (char*)g_async_queue_try_pop(buf);
+
+      if(elem_buf != NULL){
+        break;
+      }
+    }
+    fprintf(stdout, "[READ_UPDATES] poped element from queue\n");
+
+    fprintf(stdout, "[READ_UPDATES] %s\n", elem_buf);
+
+    //creating struct usr_list_elem_t* for create_elem_list function
+    usr_list_elem_t* elem = (usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
+    elem->client_ip = (char*)calloc(INET_ADDRSTRLEN,sizeof(char*));
+
+    //creating buffer for username and command to pass to create_elem_list function
+    char* userName = (char*)calloc(USERNAME_BUF_SIZE,sizeof(char));
+    char* command = (char*)calloc(1,sizeof(char)); //ricordare che hai cambiato prima era una calloc
+
+    fprintf(stdout, "[READ_UPDATES] passing element to parse function\n");
+
+    //passing string with usr elements to be parsed by create_elem_list
+    parse_elem_list(elem_buf, elem, userName, command);
+
+    free(elem_buf);
+
+    fprintf(stderr, "[READ_UPDATES] parsed string to create user element in user list\n");
+
+    //updating elem list
+    update_list(userName, elem, command);
+
+    fprintf(stderr, "[READ_UPDATES] updated user list\n");
+  }
+}
+
 void* usr_list_recv_thread_routine(void* args){
 
   int ret;
 
   //getting arguments from args used for connection
   client_thread_args_t* arg = (client_thread_args_t*)args;
+
+  //creating buffers to store modifications sent by server
+  GAsyncQueue* buf_modifications =g_async_queue_new();
+
+  //creating thread to manage updates to user list
+  pthread_t manage_updates;
+  ret = pthread_create(&manage_updates, NULL, read_updates, (void*)buf_modifications);
+  PTHREAD_ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] Unable to create manage_updates thread");
 
   //address structure for user list sender thread
   struct sockaddr_in* usrl_sender_address = (struct sockaddr_in*)calloc(1, sizeof(struct sockaddr_in));
@@ -245,56 +304,17 @@ void* usr_list_recv_thread_routine(void* args){
   //while(1){
     bzero(buf, USERLIST_BUFF_SIZE);
 
-    //making sure to read all bytes of the message
-
-    //number of modifications to receive
-    ret = recv_msg(rec_socket, buf, USERLIST_BUFF_SIZE);
-    if(ret != 0){
-      fprintf(stderr, "[RECV_THREAD_ROUTINE] Error while receiving number of modifications from server\n");
-    }
-
-
-    int num_modifiche = atoi(buf); //number of modifications
-
-    fprintf(stderr, "[RECV_THREAD_ROUTINE] received number of modifications\n");
-
-    int i;
-    for(i =0; i<num_modifiche; i++){
-      bzero(buf, USERLIST_BUFF_SIZE);
-
-      //receiveing user list element i from server
+      //receiveing user list element from server
       ret = recv_msg(rec_socket, buf, USERLIST_BUFF_SIZE);
       if(ret != 0){
-        fprintf(stderr, "[RECV_THREAD_ROUTINE] Error while receiving  user list element[%d] from server\n", i);
+        fprintf(stderr, "[RECV_THREAD_ROUTINE] Error while receiving  user list element from server\n");
       }
 
-      //
-      //create struct from string received from server
-      //pass struct (which is a usr element) to INSERT function
-      //
+      char* queueBuf_elem = (char*)malloc(strlen(buf)*sizeof(char));
 
-      //creating struct usr_list_elem_t* for create_elem_list function
-      usr_list_elem_t* elem = (usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
-      elem->client_ip = (char*)calloc(INET_ADDRSTRLEN,sizeof(char*));
+      memcpy(queueBuf_elem, buf, strlen(buf));
 
-      //creating buffer for username and command to pass to create_elem_list function
-      char* userName = (char*)calloc(USERNAME_BUF_SIZE,sizeof(char));
-      char* command = (char*)calloc(1,sizeof(char)); //ricordare che hai cambiato prima era una calloc
-
-      fprintf(stderr, "[RECV_THREAD_ROUTINE] received %d modification out of %d\n", i, num_modifiche);
-
-      //passing string with usr elements to be parsed by create_elem_list
-      parse_elem_list(buf, elem, userName, command);
-
-      fprintf(stderr, "[RECV_THREAD_ROUTINE] parsed string to create user element in user list\n");
-
-      //updating elem list
-      update_list(userName, elem, command);
-
-      fprintf(stderr, "[RECV_THREAD_ROUTINE] updated user list\n");
-
-    }// end of for loop
-
+      g_async_queue_push(buf_modifications, (gpointer)queueBuf_elem);
 
   //} //end of while(1)
 
@@ -308,7 +328,12 @@ void* usr_list_recv_thread_routine(void* args){
 
   fprintf(stderr, "[RECV_THREAD_ROUTINE] closed rec_socket and arg->socket succesfully\n");
 
+  //joining manage_updates thread
+  ret = pthread_join(manage_updates, NULL);
+  PTHREAD_ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] Unable to join manage_updates thread");
+
   free(buf);
+  g_async_queue_unref(buf_modifications);
 
   fprintf(stderr, "[RECV_THREAD_ROUTINE] exiting usr_list_recv_thread_routine\n");
 
@@ -354,16 +379,22 @@ void* connect_routine(void* args){
   client_thread_args_t* arg = (client_thread_args_t*)args;
 
   //while(1){ //start of while(1)
+
+    while(g_hash_table_size(user_list) == 0){
+
+    }
+
     ret = sem_wait(&sync_userList);
     ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in wait function on sync_userList semaphore\n");
 
-    FOR_EACH(user_list, print_userList, NULL); //printing hashtable
+    FOR_EACH(user_list, (GHFunc)print_userList, NULL); //printing hashtable
+    fprintf(stdout, "[CONNECT_ROUTINE] should print something\n");
 
     ret = sem_post(&sync_userList);
     ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in post function on sync_userList semaphore\n");
 
     //buffer for target to connect to
-    char* target = (char*)malloc(USERNAME_BUF_SIZE*sizeof(char));
+    char* target = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
 
     //getting information of the target
     usr_list_elem_t* target_elem;
@@ -373,9 +404,8 @@ void* connect_routine(void* args){
 
       //letting user decide who to connect to
       fprintf(stdout, "[CONNECT_ROUTINE] Connect to: ");
-      fflush(stdout);
-      fscanf(stdin, "%s", target);
-      fflush(stdin);
+
+      fgets(target, USERNAME_BUF_SIZE+1, stdin);
 
       ret = sem_wait(&sync_userList);
       ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in wait function on sync_userList semaphore\n");
@@ -388,13 +418,11 @@ void* connect_routine(void* args){
       if(target_elem != NULL){
         if(target_elem->a_flag == UNAVAILABLE){
           fprintf(stdout, "[CONNECT_ROUTINE] Client not available...\n");
-          fflush(stdout);
           continue;
         }
         break;
       }
       fprintf(stdout, "[CONNECT_ROUTINE] Username [%s] not found...\n", target);
-      fflush(stdout);
     }
 
     fprintf(stdout, "[CONNECT_ROUTINE] Got username...creating struct for connection\n");
@@ -440,6 +468,8 @@ int main(int argc, char* argv[]){
     username = realloc(username, USERNAME_BUF_SIZE); //reallocating buffer for username
 
   }
+
+  //fflush(stdin);
 
   fprintf(stdout, "[MAIN] got username\n");
 
@@ -542,8 +572,8 @@ int main(int argc, char* argv[]){
   fprintf(stdout, "[MAIN] sent username to server\n");
 
   //joining thread_usrl_recv
-  ret = pthread_join(thread_usrl_recv, NULL); //should be detatch but its only for test
-  PTHREAD_ERROR_HELPER(ret, "[MAIN] Unable to join user list receiver thread");
+  //ret = pthread_join(thread_usrl_recv, NULL); //should be detatch but its only for test
+  //PTHREAD_ERROR_HELPER(ret, "[MAIN] Unable to join user list receiver thread");
 
   fprintf(stderr, "[MAIN] finished waiting for thread_usrl_recv to finish routine\n");
 
