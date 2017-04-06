@@ -51,8 +51,21 @@ int recv_msg(int socket, char *buf, size_t buf_len) {
     return 0;
 }
 
+//free hash table value
+void free_user_list_element_value(gpointer data){
+  free(((usr_list_elem_t*)data)->client_ip);
+  free((usr_list_elem_t*)data);
+  return;
+}
+
+//free hash table key
+void free_user_list_element_key(gpointer data){
+  free((char*)data);
+  return;
+}
+
 GHashTable* usr_list_init(){
-  GHashTable* list = g_hash_table_new(g_str_hash, g_str_equal);
+  GHashTable* list = g_hash_table_new_full(g_str_hash, g_str_equal, (GDestroyNotify)free_user_list_element_key, (GDestroyNotify)free_user_list_element_value);
   return list;
 }
 
