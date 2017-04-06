@@ -21,6 +21,35 @@ sem_t user_list_mutex; // mutual exclusion to acces user list hash-table
 GHashTable* user_list;
 GHashTable* thread_ref;
 
+void update_availability(char* username, char* buf_command){
+  int ret = sem_wait(&user_list_mutex);
+  ERROR_HELPER(ret, "[CONNECTION THREAD][UPDATING AVAILABILITY]: cannot wait on user_list_mutex");
+
+  usr_list_elem_t* elem = (usr_list_elem_t*)LOOKUP(user_list, username); //looking for username
+  elem->a_flag = *buf_command; //update availability flag
+
+  ret = sem_post(&user_list_mutex);
+  ERROR_HELPER(ret, "[CONNECTION THREAD][UPDATING AVAILABILITY]: cannot post on user_list_mutex");
+
+  return;
+}
+
+void remove_entry(char* username){
+  int ret = sem_wait(&user_list_mutex);
+  ERROR_HELPER(ret, "[CONNECTION THREAD][REMOVING ENTRY]: cannot wait on user_list_mutex");
+
+  ret = REMOVE(user_list, username); //remove entry
+  if(ret == 0){
+    ret = -1;
+    ERROR_HELPER(ret, "[CONNECTION THREAD][REMOVING ENTRY]: remove entry failed");
+  }
+
+  ret = sem_post(&user_list_mutex);
+  ERROR_HELPER(ret, "[CONNECTION THREAD][REMOVING ENTRY]: cannot post on user_list_mutex");
+
+  return;
+}
+
 //function called by FOR_EACH. It send single user element to receiver thread in client
 GHFunc send_list_on_client_connection(gpointer key, gpointer value, gpointer user_data){
   int ret = sem_wait(&user_list_mutex);
@@ -48,15 +77,15 @@ void receive_and_execute_command(thread_args_t* args, char* buf_command){
   //selecting correct command
   switch(*buf_command){
     case UNAVAILABLE :
-      //update hash table;
+      update_availability(args->client_user_name, buf_command);
       //queue insertion;
       break;
     case AVAILABLE :
-      //update hash table;
+      update_availability(args->client_user_name, buf_command);
       //queue insertion;
       break;
     case DISCONNECT :
-      //update hash table;
+      remove_entry(args->client_user_name);
       //queue insertion;
       //thread's close operations;
       break;//never executed beacuse in close operations, the thread exit safely

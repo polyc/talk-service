@@ -19,3 +19,5 @@ void* sender_routine(void* arg);
 void stringify_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command);
 void receive_and_execute_command(thread_args_t* args, char* buf_command);
 GHFunc send_list_on_client_connection(gpointer key, gpointer value, gpointer user_data);
+void update_availability(char* username, char* buf_command);
+void remove_entry(char* username);
