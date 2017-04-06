@@ -20,6 +20,7 @@
 sem_t user_list_mutex; // mutual exclusion to acces user list hash-table
 GHashTable* user_list;
 GHashTable* thread_ref;
+int thread_count;
 
 void update_availability(char* username, char* buf_command){
   int ret = sem_wait(&user_list_mutex);
@@ -51,7 +52,7 @@ void remove_entry(char* username){
 }
 
 //function called by FOR_EACH. It send single user element to receiver thread in client
-GHFunc send_list_on_client_connection(gpointer key, gpointer value, gpointer user_data){
+void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_data){
   int ret = sem_wait(&user_list_mutex);
   ERROR_HELPER(ret, "[SENDING LIST]: cannot wait on user_list_mutex");
 
@@ -213,7 +214,9 @@ void* sender_routine(void* arg){
 }
 
 int main(int argc, char const *argv[]) {
-  int ret, server_desc, client_desc, thread_count = 0;
+  int ret, server_desc, client_desc;
+
+  thread_count = 0;
 
   //generating server userlist
   user_list = usr_list_init();
