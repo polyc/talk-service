@@ -95,7 +95,6 @@ void receive_and_execute_command(thread_args_t* args, char* buf_command){
   return;
 }
 
-
 //transform a usr_list_elem_t in a string according to mod_command
 void stringify_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command){
   fprintf(stdout, "[SENDER THREAD]: sono dentro la funzione di serializzazione\n");
