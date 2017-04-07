@@ -445,7 +445,7 @@ void* connect_routine(void* args){
 
   //} //end of while(1)
 
-  return;
+  pthread_exit(NULL);
 
 }
 
