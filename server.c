@@ -20,6 +20,7 @@
 sem_t user_list_mutex; // mutual exclusion to acces user list hash-table
 GHashTable* user_list;
 GHashTable* thread_ref;
+GQueue* changes_queue;
 int thread_count;
 
 void update_availability(char* username, char* buf_command){
@@ -223,6 +224,8 @@ int main(int argc, char const *argv[]) {
 
   //generating server thread manipulation hash table
   thread_ref = thread_ref_init();
+
+  changes_queue = changes_queue_init();
 
   //init user_list_mutex
   ret = sem_init(&user_list_mutex, 0, 1);

@@ -73,3 +73,7 @@ GHashTable* thread_ref_init(){
   GHashTable* list = g_hash_table_new(g_str_hash, g_str_equal);
   return list;
 }
+
+GQueue* changes_queue_init(){
+  return g_queue_new();
+}
