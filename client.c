@@ -25,6 +25,14 @@ GHashTable* user_list;
 
 char* USERNAME;
 
+static volatile int keepRunning = 1;
+
+void main_interrupt_handler(int dummy){
+    keepRunning = 0;
+
+    pthread_kill(connect_routine, dummy);
+
+}
 
 static void print_userList(gpointer key, gpointer elem, gpointer data){
 
@@ -51,8 +59,15 @@ static void print_userList(gpointer key, gpointer elem, gpointer data){
 void* listen_routine(void* args){
 
   int ret;
+  int sem_value;
 
   while(1){
+
+    ret = sem_getvalue(&sync_connect_listen, &sem_value);
+    ERROR_HELPER(ret, "[CONNECT_ROUTINE] sem_getvalue failed");
+
+    //this controls if connect_routine is working. if it is then there is no need to execute the rest of the code
+    while(sem_value < 1){}
 
     //socket descriptor for listen thread
     int thread_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -80,11 +95,11 @@ void* listen_routine(void* args){
     struct sockaddr_in* client_address = (struct sockaddr_in*)calloc(1, sizeof(struct sockaddr_in));
     socklen_t client_address_len = sizeof(client_address);
 
-    ret = sem_wait(&sync_connect_listen);
-    ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in wait function on sync_connect_listen semaphore\n");
-
     int client_socket = accept(thread_socket, (struct sockaddr*) &client_address, &client_address_len);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Cannot accept connection on user list receiver thread socket");
+
+    ret = sem_wait(&sync_connect_listen);
+    ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in wait function on sync_connect_listen semaphore\n");
 
     char* buf_answer = (char*)malloc(sizeof(char));
 
@@ -125,10 +140,17 @@ void* listen_routine(void* args){
 void* connect_routine(void* args){
 
   int ret;
+  int sem_value;
 
   client_thread_args_t* arg = (client_thread_args_t*)args;
 
-  //while(1){ //start of while(1)
+  while(1){ //start of while(1)
+
+    ret = sem_getvalue(&sync_connect_listen, &sem_value);
+    ERROR_HELPER(ret, "[CONNECT_ROUTINE] sem_getvalue failed");
+
+    //this controls if listen_routine is working. if it is then there is no need to execute the rest of the code
+    while(sem_value < 1){}
 
     while(g_hash_table_size(user_list) == 0){}
 
@@ -199,7 +221,9 @@ void* connect_routine(void* args){
     ret = sem_post(&sync_connect_listen);
     ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
 
-  //} //end of while(1)
+  } //end of while(1)
+
+  fprintf(stdout, "[CONNECT_ROUTINE] exiting connect routine due to CRTL-C signal\n");
 
   pthread_exit(NULL);
 
@@ -565,8 +589,8 @@ int main(int argc, char* argv[]){
   PTHREAD_ERROR_HELPER(ret, "[MAIN] Unable to create listen_thread");
 
   //detatching from listen_thread
-  ret = pthread_detach(thread_listen);
-  PTHREAD_ERROR_HELPER(ret, "[MAIN] Unable to detatch from listen_thread");
+  ret = pthread_detach(thread_listen);                                          //cancell because main process will join on this thread
+  PTHREAD_ERROR_HELPER(ret, "[MAIN] Unable to detatch from listen_thread");     //when handling SIGINT
   //
   //detached from thread listen
 
@@ -626,22 +650,41 @@ int main(int argc, char* argv[]){
 
   fprintf(stderr, "[MAIN] Created connect_thread\n");
 
-  ret = pthread_join(connect_thread, NULL); //should be detatch but its only for test
-  PTHREAD_ERROR_HELPER(ret, "[MAIN] Unable to join connect_thread");
+  //ret = pthread_detach(connect_thread); //should be detatch but its only for test
+  //PTHREAD_ERROR_HELPER(ret, "[MAIN] Unable to detach from connect_thread");
   //
   //
+
+  //ret = close(usrl_recv_socket);
+  //ERROR_HELPER(ret, "Cannot close usrl_recv_socket");
+
+
+  signal(SIGINT, main_interrupt_handler);
+
+  while(keepRunning){}
+
+  fprintf(stdout, "\n[MAIN] catched signal CTRL-C...\n");
+
+  fprintf(stdout, "[MAIN] closing socket descriptors...\n");
 
   // close client main process socket
   ret = close(socket_desc);
   ERROR_HELPER(ret, "[MAIN] Cannot close socket_desc");
 
+  fprintf(stdout, "[MAIN] destroying semaphores....\n");
+
   ret = sem_destroy(&sync_userList);
   ERROR_HELPER(ret, "[MAIN] Error destroying &sync_userList semaphore");
 
-  //ret = close(usrl_recv_socket);
-  //ERROR_HELPER(ret, "Cannot close usrl_recv_socket");
+  ret = sem_destroy(&sync_connect_listen);
+  ERROR_HELPER(ret, "[MAIN] Error destroying &sync_connect_listen semaphore");
 
-  fprintf(stdout, "[MAIN] exiting main process\n");
+  fprintf(stdout, "[MAIN] freeing allocated data...\n");
+
+  free(USERNAME);
+  free(username_buf_server);
+
+  fprintf(stdout, "[MAIN] exiting main process\n\n");
 
   exit(EXIT_SUCCESS);
 
