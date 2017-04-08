@@ -21,3 +21,5 @@ void receive_and_execute_command(thread_args_t* args, char* buf_command);
 void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_data);
 void update_availability(char* username, char* buf_command);
 void remove_entry(char* username);
+void push_entry();
+void pop_entry();

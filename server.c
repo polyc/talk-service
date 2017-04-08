@@ -18,6 +18,8 @@
 #include "util.h"
 
 sem_t user_list_mutex; // mutual exclusion to acces user list hash-table
+sem_t changes_queue_mutex;
+sem_t thread_count_mutex;
 GHashTable* user_list;
 GHashTable* thread_ref;
 GQueue* changes_queue;
@@ -51,6 +53,10 @@ void remove_entry(char* username){
 
   return;
 }
+
+void push_entry(){}
+
+void pop_entry(){}
 
 //function called by FOR_EACH. It send single user element to receiver thread in client
 void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_data){
@@ -231,6 +237,10 @@ int main(int argc, char const *argv[]) {
   ret = sem_init(&user_list_mutex, 0, 1);
   ERROR_HELPER(ret, "[FATAL ERROR] Could not init user_list_mutex semaphore");
 
+  //init thread_count_mutex
+  ret = sem_init(&thread_count_mutex, 0, 1);
+  ERROR_HELPER(ret, "[FATAL ERROR] Could not init thread_count_mutex semaphore");
+
   struct sockaddr_in server_addr = {0};
   int sockaddr_len = sizeof(struct sockaddr_in);
 
@@ -324,8 +334,12 @@ int main(int argc, char const *argv[]) {
 
       //new buffer for new incoming connection
       client_addr = calloc(1, sizeof(struct sockaddr_in));
+
       //incrementing progressive number of threads
+      //mutex with queue manager thread and connection handler thread
+      sem_wait(&thread_count_mutex);
       thread_count++;
+      sem_post(&thread_count_mutex);
 
       ret = pthread_detach(thread_sender);
       PTHREAD_ERROR_HELPER(ret, "Could not detach thread");
