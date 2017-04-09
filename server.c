@@ -22,15 +22,14 @@ sem_t changes_queue_mutex;
 sem_t thread_count_mutex;
 GHashTable* user_list;
 GHashTable* thread_ref;
-GQueue* changes_queue;
 int thread_count;
 
-void update_availability(char* username, char* buf_command){
+void update_availability(usr_list_elem_t* elem_to_update, char* buf_command){
+  //updating user_list
   int ret = sem_wait(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD][UPDATING AVAILABILITY]: cannot wait on user_list_mutex");
 
-  usr_list_elem_t* elem = (usr_list_elem_t*)LOOKUP(user_list, username); //looking for username
-  elem->a_flag = *buf_command; //update availability flag
+  elem_to_update->a_flag = *buf_command; //update availability flag
 
   ret = sem_post(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD][UPDATING AVAILABILITY]: cannot post on user_list_mutex");
@@ -38,24 +37,24 @@ void update_availability(char* username, char* buf_command){
   return;
 }
 
-void remove_entry(char* username){
-  int ret = sem_wait(&user_list_mutex);
-  ERROR_HELPER(ret, "[CONNECTION THREAD][REMOVING ENTRY]: cannot wait on user_list_mutex");
-
-  ret = REMOVE(user_list, username); //remove entry
+void remove_entry(char* elem_to_remove){//to befinished
+  int ret = REMOVE(user_list, elem_to_remove); //remove entry
   if(ret == 0){
     ret = -1;
     ERROR_HELPER(ret, "[CONNECTION THREAD][REMOVING ENTRY]: remove entry failed");
   }
-
-  ret = sem_post(&user_list_mutex);
-  ERROR_HELPER(ret, "[CONNECTION THREAD][REMOVING ENTRY]: cannot post on user_list_mutex");
-
   return;
 }
 
-void push_entry(){}
+//pushing message into sender thread personal hash table changelog
+void push_entry(char* parsed_message, GAsyncQueue* queue){
+  g_async_queue_push (queue, (gpointer)parsed_message);
+  return;
+}
 
+void message_broadcast(){}
+
+//sender retrieve message from its queue
 void pop_entry(){}
 
 //function called by FOR_EACH. It send single user element to receiver thread in client
@@ -78,26 +77,24 @@ void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_
   return;
 }
 
-void receive_and_execute_command(thread_args_t* args, char* buf_command){
+void receive_and_execute_command(thread_args_t* args, char* buf_command, usr_list_elem_t* element_to_update){
   int ret = recv_msg(args->socket, buf_command, 1);
   ERROR_HELPER(ret, "cannot receive server command from client");
 
   //selecting correct command
   switch(*buf_command){
     case UNAVAILABLE :
-      update_availability(args->client_user_name, buf_command);
-      //queue insertion;
+      update_availability(element_to_update, buf_command);
       break;
     case AVAILABLE :
-      update_availability(args->client_user_name, buf_command);
-      //queue insertion;
+      update_availability(element_to_update, buf_command);
       break;
-    case DISCONNECT :
-      remove_entry(args->client_user_name);
-      //queue insertion;
+    case DISCONNECT:
+      //remove entry
       //thread's close operations;
       break;//never executed beacuse in close operations, the thread exit safely
     default :
+      //throw error
       return;
   }
   return;
@@ -174,7 +171,7 @@ void* connection_handler(void* arg){
   char* buf_command = (char*)calloc(1, sizeof(char));
 
   while(1){
-    receive_and_execute_command(args, buf_command);
+    receive_and_execute_command(args, buf_command, element);
   }
   /*CLOSE OPERATIONS (TO BE WRITTEN IN A FUNCTION)
   ret = close(args->socket);//close client_desc
@@ -230,8 +227,6 @@ int main(int argc, char const *argv[]) {
 
   //generating server thread manipulation hash table
   thread_ref = thread_ref_init();
-
-  changes_queue = changes_queue_init();
 
   //init user_list_mutex
   ret = sem_init(&user_list_mutex, 0, 1);
