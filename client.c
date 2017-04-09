@@ -63,12 +63,6 @@ void* listen_routine(void* args){
 
   while(1){
 
-    ret = sem_getvalue(&sync_connect_listen, &sem_value);
-    ERROR_HELPER(ret, "[CONNECT_ROUTINE] sem_getvalue failed");
-
-    //this controls if connect_routine is working. if it is then there is no need to execute the rest of the code
-    while(sem_value < 1){}
-
     //socket descriptor for listen thread
     int thread_socket = socket(AF_INET, SOCK_STREAM, 0);
     ERROR_HELPER(thread_socket, "[LISTEN_ROUTINE] Error while creating thread_socket");
@@ -77,7 +71,7 @@ void* listen_routine(void* args){
     struct sockaddr_in thread_addr = {0};
     thread_addr.sin_family         = AF_INET;
     thread_addr.sin_port           = htons(CLIENT_THREAD_LISTEN_PORT); // don't forget about network byte order!
-    thread_addr.sin_addr.s_addr    = inet_addr(LOCAL_IP);
+    thread_addr.sin_addr.s_addr    = INADDR_ANY;
 
     //binding listen thread address to listen thread socket
     ret = bind(thread_socket, (const struct sockaddr*)&thread_addr, sizeof(struct sockaddr_in));
@@ -95,11 +89,11 @@ void* listen_routine(void* args){
     struct sockaddr_in* client_address = (struct sockaddr_in*)calloc(1, sizeof(struct sockaddr_in));
     socklen_t client_address_len = sizeof(client_address);
 
-    int client_socket = accept(thread_socket, (struct sockaddr*) &client_address, &client_address_len);
-    ERROR_HELPER(ret, "[LISTEN_ROUTINE] Cannot accept connection on user list receiver thread socket");
-
     ret = sem_wait(&sync_connect_listen);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in wait function on sync_connect_listen semaphore\n");
+
+    int client_socket = accept(thread_socket, (struct sockaddr*) &client_address, &client_address_len);
+    ERROR_HELPER(ret, "[LISTEN_ROUTINE] Cannot accept connection on user list receiver thread socket");
 
     char* buf_answer = (char*)malloc(sizeof(char));
 
@@ -145,12 +139,6 @@ void* connect_routine(void* args){
   client_thread_args_t* arg = (client_thread_args_t*)args;
 
   while(1){ //start of while(1)
-
-    ret = sem_getvalue(&sync_connect_listen, &sem_value);
-    ERROR_HELPER(ret, "[CONNECT_ROUTINE] sem_getvalue failed");
-
-    //this controls if listen_routine is working. if it is then there is no need to execute the rest of the code
-    while(sem_value < 1){}
 
     while(g_hash_table_size(user_list) == 0){}
 
@@ -405,8 +393,9 @@ void* usr_list_recv_thread_routine(void* args){
 
   int ret;
 
-  //getting arguments from args used for connection
-  client_thread_args_t* arg = (client_thread_args_t*)args;
+  //socket descriptor for user list receiver thread
+  int usrl_recv_socket = socket(AF_INET, SOCK_STREAM, 0);
+  ERROR_HELPER(usrl_recv_socket, "[MAIN] Error while creating user list receiver thread socket descriptor");
 
   //creating buffers to store modifications sent by server
   GAsyncQueue* buf_modifications = g_async_queue_new();
@@ -420,33 +409,37 @@ void* usr_list_recv_thread_routine(void* args){
   struct sockaddr_in* usrl_sender_address = (struct sockaddr_in*)calloc(1, sizeof(struct sockaddr_in));
   socklen_t usrl_sender_address_len = sizeof(usrl_sender_address);
 
-
   //struct for thead user list receiver thread bind function
   struct sockaddr_in thread_addr = {0};
   thread_addr.sin_family      = AF_INET;
   thread_addr.sin_port        = htons(CLIENT_THREAD_RECEIVER_PORT); // don't forget about network byte order!
-  thread_addr.sin_addr.s_addr = inet_addr(LOCAL_IP);
+  thread_addr.sin_addr.s_addr = INADDR_ANY;
 
   fprintf(stderr, "[RECV_THREAD_ROUTINE] created sockaddr_in struct for bind function\n");
 
+  //we enable SO_REUSEADDR to quickly restart our server after a crash
+  int reuseaddr_opt = 1;
+  ret = setsockopt(usrl_recv_socket, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_opt, sizeof(reuseaddr_opt));
+  ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] Cannot set SO_REUSEADDR option");
+
   //binding user list receiver thread address to user list receiver thread socket
-  ret = bind(arg->socket, (const struct sockaddr*)&thread_addr, sizeof(struct sockaddr_in));
+  ret = bind(usrl_recv_socket, (const struct sockaddr*)&thread_addr, sizeof(struct sockaddr_in));
   ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] Error while binding address to user list receiver thread socket");
 
   fprintf(stderr, "[RECV_THREAD_ROUTINE] address binded to socket\n");
-
-  //user list receiver thread listening for incoming connections
-  ret = listen(arg->socket, 1);
-  ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] Cannot listen on user list receiver thread socket");
-
-  fprintf(stderr, "[RECV_THREAD_ROUTINE] listening on socket for server connection\n");
 
   //ublocking &sync_receiver for main process
   ret = sem_post(&sync_receiver);
   ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] Error in sem_post on &sync_receiver semaphore (user list receiver thread routine)");
 
+  //user list receiver thread listening for incoming connections
+  ret = listen(usrl_recv_socket, 1);
+  ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] Cannot listen on user list receiver thread socket");
+
+  fprintf(stderr, "[RECV_THREAD_ROUTINE] listening on socket for server connection\n");
+
   //accepting connection on user list receiver thread socket
-  int rec_socket = accept(arg->socket, (struct sockaddr*) &usrl_sender_address, &usrl_sender_address_len);
+  int rec_socket = accept(usrl_recv_socket, (struct sockaddr*) &usrl_sender_address, &usrl_sender_address_len);
   ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] Cannot accept connection on user list receiver thread socket");
 
   fprintf(stderr, "[RECV_THREAD_ROUTINE] accepted connection from server\n");
@@ -472,12 +465,13 @@ void* usr_list_recv_thread_routine(void* args){
 
   //} //end of while(1)
 
+
   fprintf(stderr, "[RECV_THREAD_ROUTINE] closing rec_socket and arg->socket...\n");
 
   ret = close(rec_socket);
   ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] Cannot close socket");
 
-  ret = close(arg->socket);
+  ret = close(usrl_recv_socket);
   ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] Cannot close usrl_recv_socket");
 
   fprintf(stderr, "[RECV_THREAD_ROUTINE] closed rec_socket and arg->socket succesfully\n");
@@ -572,14 +566,9 @@ int main(int argc, char* argv[]){
   struct sockaddr_in serv_addr = {0};
   serv_addr.sin_family         = AF_INET;
   serv_addr.sin_port           = htons(SERVER_PORT);
-  serv_addr.sin_addr.s_addr    = inet_addr(LOCAL_IP);
+  serv_addr.sin_addr.s_addr    = inet_addr(SERVER_IP);
 
   fprintf(stdout, "[MAIN] created data structure for connection with server\n");
-
-  //socket descriptor for user list receiver thread
-  int usrl_recv_socket = socket(AF_INET, SOCK_STREAM, 0);
-  ERROR_HELPER(usrl_recv_socket, "[MAIN] Error while creating user list receiver thread socket descriptor");
-
 
   //thread listen
   //
@@ -597,13 +586,9 @@ int main(int argc, char* argv[]){
 
   //user list receiver thread
   //
-  //creating parameters for user list receiver thread funtion
-  client_thread_args_t* usrl_recv_args = (client_thread_args_t*)malloc(sizeof(client_thread_args_t));
-  usrl_recv_args->socket = usrl_recv_socket;
-
   //creating and spawning user list receiver thread with parameters
   pthread_t thread_usrl_recv;
-  ret = pthread_create(&thread_usrl_recv, NULL, usr_list_recv_thread_routine, (void*)usrl_recv_args);
+  ret = pthread_create(&thread_usrl_recv, NULL, usr_list_recv_thread_routine, NULL);
   PTHREAD_ERROR_HELPER(ret, "[MAIN] Unable to create user list receiver thread");
 
   fprintf(stdout, "[MAIN] waiting for usrl_listen_thread_routine to bind address\n");
