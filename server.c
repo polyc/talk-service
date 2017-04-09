@@ -62,15 +62,15 @@ void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_
   int ret = sem_wait(&user_list_mutex);
   ERROR_HELPER(ret, "[SENDING LIST]: cannot wait on user_list_mutex");
 
-  char* buf = calloc(USERNAME_BUF_SIZE, sizeof(char));
-  stringify_user_element(buf, value, key, NEW);
+  char buf[USERNAME_BUF_SIZE] = {0};
+  stringify_user_element(&buf, value, key, NEW);
 
   fprintf(stdout, "[SENDING LIST][USERNAME]: %s\n", (char*)key);
   fprintf(stdout,"[SENDING LIST][IP]: %s\n", (char*)((usr_list_elem_t*)value)->client_ip);
   fprintf(stdout, "[SENDING LIST][FLAG]: %c\n", (char)((usr_list_elem_t*)value)->a_flag);
 
-  send_msg(*((int*)user_data), buf); //(socket, buf);
-  free(buf);
+  send_msg(*((int*)user_data), &buf); //(socket, buf);
+
 
   ret = sem_post(&user_list_mutex);
   ERROR_HELPER(ret, "[SENDING LIST]: cannot post on user_list_mutex");
