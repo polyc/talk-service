@@ -85,9 +85,11 @@ void receive_and_execute_command(thread_args_t* args, char* buf_command, usr_lis
   switch(*buf_command){
     case UNAVAILABLE :
       update_availability(element_to_update, buf_command);
+
       break;
     case AVAILABLE :
       update_availability(element_to_update, buf_command);
+
       break;
     case DISCONNECT:
       //remove entry
@@ -193,7 +195,7 @@ void* sender_routine(void* arg){
   struct sockaddr_in rec_addr = {0};
   rec_addr.sin_family         = AF_INET;
   rec_addr.sin_port           = htons(CLIENT_THREAD_RECEIVER_PORT);
-  rec_addr.sin_addr.s_addr    = inet_addr(LOCAL_IP);
+  rec_addr.sin_addr.s_addr    = inet_addr(args->client_ip);
 
   fprintf(stderr, "[SENDER THREAD]: indirizzo thread receiver inizializzato con successo\n");
 
@@ -311,9 +313,13 @@ int main(int argc, char const *argv[]) {
 
       //sender thread args and spawning
       sender_thread_args_t* sender_args = (sender_thread_args_t*)malloc(sizeof(sender_thread_args_t));
+
       sender_args->chandler_sender_sync = (sem_t*)malloc(sizeof(sem_t));
       ret = sem_init(sender_args->chandler_sender_sync, 0, 0);
       ERROR_HELPER(ret, "[MAIN]:cannot init chandler_sender_sync sempahore");
+
+      sender_args->client_ip = (char*)malloc(sizeof(INET_ADDRSTRLEN));
+      memcpy(sender_args->client_ip, client_ip_buf, INET_ADDRSTRLEN);
 
       fprintf(stderr, "[MAIN]: allocati argomenti per il sender thread\n");
 

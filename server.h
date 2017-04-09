@@ -11,6 +11,7 @@ typedef struct thread_args_s{
 typedef struct sender_thread_args_s{
   sem_t* chandler_sender_sync;//sync between chandlers and senders
   GAsyncQueue* mailbox; //cHandlers put their messages here
+  char* client_ip;
 }sender_thread_args_t;
 
 //void create_user_list_element(usr_list_elem_t* element, char* ip, thread_args_t* args, char* buf);
