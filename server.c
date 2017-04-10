@@ -149,7 +149,7 @@ void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_user
 }
 
 //client-process/server-thread communication routine
-
+void* connection_handler(void* arg){
   thread_args_t* args = (thread_args_t*)arg;
 
   int ret;
