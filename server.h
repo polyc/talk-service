@@ -19,6 +19,7 @@ void* connection_handler(void* arg);
 void* sender_routine(void* arg);
 char* build_mailbox_message(char* username, char* buf_command);
 void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command);
+void extract_username_from_message(char* message, char* username);
 void receive_and_execute_command(thread_args_t* args, char* buf_command, usr_list_elem_t* element_to_update);
 void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_data);
 void update_availability(usr_list_elem_t* element_to_update, char* buf_command);

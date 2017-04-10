@@ -40,7 +40,10 @@ void update_availability(usr_list_elem_t* elem_to_update, char* buf_command){
 
 void remove_entry(char* elem_to_remove){//to befinished
   int ret = REMOVE(user_list, elem_to_remove); //remove entry
-  if(ret == FALSE){
+  if(ret != FALSE){
+    fprintf(stdout, "[CONNECTION THREAD] successfully removed entry on disconnect operation\n");
+  }
+  else{
     ret = -1;
     ERROR_HELPER(ret, "[CONNECTION THREAD][REMOVING ENTRY]: remove entry failed");
   }
@@ -78,7 +81,7 @@ void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_
 
 void receive_and_execute_command(thread_args_t* args, char* buf_command, usr_list_elem_t* element_to_update){
 
-  int ret = recv_msg(args->socket, buf_command, 2);
+  int ret = recv_msg(args->socket, buf_command, 1);
   ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot receive server command from client");
 
   fprintf(stdout, "[CONNECTION THREAD] buf_command: %s\n", buf_command);
@@ -107,6 +110,7 @@ void receive_and_execute_command(thread_args_t* args, char* buf_command, usr_lis
       //throw error
       return;
   }
+  buf_command = 0; //buffer cleanup
   return;
 }
 
@@ -118,6 +122,19 @@ char* build_mailbox_message(char* username, char* buf_command) {
   strcat(ret, username);
   strcat(ret ,"-\n");
   return ret;
+}
+
+void extract_username_from_message(char* message, char* username){
+  fprintf(stdout, "[SENDER THREAD]: extracting username\n");
+  int i;
+  for (i = 2; i < USERNAME_BUF_SIZE; i++) {
+    username[i] = message[i];
+    if(message[i] == '-'){
+      i++;
+      break;
+    }
+  }
+  return;
 }
 
 //transform a usr_list_elem_t in a string according to mod_command
@@ -187,10 +204,9 @@ void* connection_handler(void* arg){
   ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot post on chandler_sender_sync");
 
   //command receiver buffer
-  char* buf_command = (char*)calloc(2, sizeof(char));
+  char* buf_command = (char*)calloc(1, sizeof(char));
 
   while(1){
-
     receive_and_execute_command(args, buf_command, element);
   }
   /*CLOSE OPERATIONS (TO BE WRITTEN IN A FUNCTION)
@@ -205,6 +221,9 @@ void* connection_handler(void* arg){
 //list changes communication routine
 void* sender_routine(void* arg){
   int ret;
+
+  //referring mailbox
+  GAsyncQueue* my_mailbox = REF(mailbox_queue);
 
   sender_thread_args_t* args = (sender_thread_args_t*)arg;
 
@@ -229,6 +248,41 @@ void* sender_routine(void* arg){
   ERROR_HELPER(ret, "[SENDER THREAD]: cannot wait on chandler_sender_sync semaphore");
   //sending list to client (thread safe)
   FOR_EACH(user_list, (GHFunc)send_list_on_client_connection, (gpointer)&socket_desc);
+
+  //retrieving changes from mailbox and sending to client
+  //buffer to be sent
+  char* send_buf = (char*)calloc(USERLIST_BUFF_SIZE, sizeof(char));
+  //aux command buffer
+  char* buf_command = (char*)malloc(sizeof(char));
+  //aux username buffer
+  char* username = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
+
+  while(1){
+    char* message = POP(my_mailbox); //blocked if there are no message
+    //extract command from message
+    buf_command[0] = message[1];
+    //extract username from message
+    extract_username_from_message(message, username);
+    free(message);
+
+    //using username to retrieve changes from userlist
+    ret = sem_wait(&user_list_mutex);//wait for other threads
+    ERROR_HELPER(ret, "[SENDER THREAD]: cannot wait on user_list_mutex semaphore");
+    usr_list_elem_t* element_to_serialize = (usr_list_elem_t*)LOOKUP(user_list, username);
+    //serializing message
+    serialize_user_element(send_buf, element_to_serialize, username, *buf_command);
+
+    ret = sem_wait(&user_list_mutex);//unlock semaphore
+    ERROR_HELPER(ret, "[SENDER THREAD]: cannot post on user_list_mutex semaphore");
+
+    //sending message to client's receiver thread
+    send_msg(socket_desc, send_buf);
+  }
+  //CLOSE OPERATIONS TO BE HANDLED BY SIGNAL handler
+  UNREF(mailbox_queue);
+  free(send_buf);
+  free(buf_command);
+  free(username);
 
   ret = close(socket_desc);
   ERROR_HELPER(ret, "Error closing socket_desc in sender routine");
