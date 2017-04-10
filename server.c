@@ -108,7 +108,10 @@ void receive_and_execute_command(thread_args_t* args, char* buf_command, usr_lis
 char* build_mailbox_message(char* username, char* buf_command) {
   char* ret = (char*)malloc(MESSAGE_SIZE*sizeof(char));
   *ret = "";
-  ret[0] = buf_command;
+  ret[0] = *buf_command;
+
+  fprintf(stdout, "ciaociaociaociao\n");
+
   strcat(ret, "-");
   strcat(ret, username);
   strcat(ret ,"-\n");
@@ -146,7 +149,7 @@ void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_user
 }
 
 //client-process/server-thread communication routine
-void* connection_handler(void* arg){
+
   thread_args_t* args = (thread_args_t*)arg;
 
   int ret;
@@ -182,7 +185,7 @@ void* connection_handler(void* arg){
   ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot post on chandler_sender_sync");
 
   //command receiver buffer
-  char* buf_command = (char*)calloc(1, sizeof(char));
+  char* buf_command = (char*)calloc(2, sizeof(char));
 
   while(1){
     receive_and_execute_command(args, buf_command, element);

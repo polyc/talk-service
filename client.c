@@ -28,9 +28,8 @@ char* USERNAME;
 static volatile int keepRunning = 1;
 
 void main_interrupt_handler(int dummy){
-    keepRunning = 0;
 
-    pthread_kill(connect_routine, dummy);
+    keepRunning = 0;
 
 }
 
@@ -60,6 +59,8 @@ void* listen_routine(void* args){
 
   int ret;
   int sem_value;
+
+  client_thread_args_t* arg = (client_thread_args_t*)args;
 
   while(1){
 
@@ -98,6 +99,8 @@ void* listen_routine(void* args){
     int client_socket = accept(thread_socket, (struct sockaddr*) &client_address, &client_address_len);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Cannot accept connection on user list receiver thread socket");
 
+    send_msg(arg->socket, "UNAVAILABLE");
+
     ret = sem_wait(&sync_connect_listen);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in wait function on sync_connect_listen semaphore\n");
 
@@ -109,6 +112,8 @@ void* listen_routine(void* args){
     if(buf_answer[0] == 'N' || buf_answer[0] == 'n'){
       close(thread_socket);
       free(client_address);
+
+      send_msg(arg->socket, "AVAILABLE");
 
       ret = sem_post(&sync_connect_listen);
       ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
@@ -130,6 +135,8 @@ void* listen_routine(void* args){
 
     chat_session(client_username, client_socket);
 
+    send_msg(arg->socket, "AVAILABLE");
+
     ret = sem_post(&sync_connect_listen);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
 
@@ -140,9 +147,14 @@ void* listen_routine(void* args){
 void* connect_routine(void* args){
 
   int ret;
-  int sem_value;
+
+  //socket descriptor for connect thread
+  int connect_socket = socket(AF_INET, SOCK_STREAM, 0);
+  ERROR_HELPER(connect_socket, "[CONNECT_ROUTINE] Error while creating connect thread socket descriptor");
 
   client_thread_args_t* arg = (client_thread_args_t*)args;
+
+  send_msg(arg->socket, "UNAVAILABLE");
 
 
   if(g_hash_table_size(user_list) == 0){
@@ -172,7 +184,9 @@ void* connect_routine(void* args){
 
     fgets(target, USERNAME_BUF_SIZE, stdin);
 
-    if(strcmp(target, "list\n")==0){
+    strtok(target, "\n");
+
+    if(strcmp(target, "list")==0){
       ret = sem_wait(&sync_userList);
       ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in wait function on sync_userList semaphore\n");
 
@@ -185,7 +199,16 @@ void* connect_routine(void* args){
 
     }
 
-    strtok(target, "\n");
+    if(strcmp(target, "exit connect")==0){
+
+      fprintf(stdout, "[CONNECT_ROUTINE] exiting connect routine\n");
+      send_msg(arg->socket, "AVAILABLE");
+
+      ret = sem_post(&sync_connect_listen);
+      ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
+
+      pthread_exit(NULL);
+    }
 
     ret = sem_wait(&sync_userList);
     ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in wait function on sync_userList semaphore\n");
@@ -215,18 +238,19 @@ void* connect_routine(void* args){
 
   fprintf(stdout, "[CONNECT_ROUTINE] Connecting to %s on ip: %s...\n", target, target_elem->client_ip);
 
-  ret = connect(arg->socket, (struct sockaddr*) &target_addr, sizeof(struct sockaddr_in));
+  ret = connect(connect_socket, (struct sockaddr*) &target_addr, sizeof(struct sockaddr_in));
   ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error trying to connect to target");
 
-  send_msg(arg->socket, USERNAME);
+  send_msg(connect_socket, USERNAME);
 
   fprintf(stdout, "[CONNECT_ROUTINE] Connected to %s passing arguments to chat_session\n", target);
 
-  chat_session(target, arg->socket);
+  chat_session(target, connect_socket);
+
+  send_msg(arg->socket, "AVAILABLE");
 
   ret = sem_post(&sync_connect_listen);
   ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
-
 
   fprintf(stdout, "[CONNECT_ROUTINE] exiting connect routine due to CRTL-C signal\n");
 
@@ -257,7 +281,7 @@ int get_username(char* username){
       return 0; //contains '-' character, username not ok return 0
     }
   }
-  strcat(username, "\n");
+  //strcat(username, "\n");
 
   return 1; //usrname ok
 }
@@ -592,9 +616,13 @@ int main(int argc, char* argv[]){
 
   //thread listen
   //
+  //creating parameters for listen thread
+  client_thread_args_t* listen_thread_args = (client_thread_args_t*)malloc(sizeof(client_thread_args_t));
+  listen_thread_args->socket = socket_desc;
+
   //creating and spawning thread listen with parameters
   pthread_t thread_listen;
-  ret = pthread_create(&thread_listen, NULL, listen_routine, NULL);
+  ret = pthread_create(&thread_listen, NULL, listen_routine, (void*)listen_thread_args);
   PTHREAD_ERROR_HELPER(ret, "[MAIN] Unable to create listen_thread");
 
   //detatching from listen_thread
@@ -647,6 +675,8 @@ int main(int argc, char* argv[]){
 
   char* buf_commands = (char*)malloc(8*sizeof(char));
 
+  pthread_t connect_thread;
+
   while(keepRunning){
 
     bzero(buf_commands, 8);
@@ -655,7 +685,6 @@ int main(int argc, char* argv[]){
 
     if(strcmp(buf_commands, "connect\n")==0){
 
-      fprintf(stderr, "[MAIN] prova\n");
 
       ret = sem_wait(&sync_connect_listen);
       ERROR_HELPER(ret, "[MAIN] Error in wait function on sync_connect_listen semaphore\n");
@@ -666,7 +695,7 @@ int main(int argc, char* argv[]){
 
       //creating parameters for connect thread funtion
       client_thread_args_t* connect_thread_args = (client_thread_args_t*)malloc(sizeof(client_thread_args_t));
-      connect_thread_args->socket = connect_socket;
+      connect_thread_args->socket = socket_desc;
 
       fprintf(stderr, "[MAIN] Creating connect_thread...\n");
 
@@ -676,7 +705,7 @@ int main(int argc, char* argv[]){
 
       fprintf(stderr, "[MAIN] Created connect_thread\n");
 
-      ret = pthread_join(&connect_thread, NULL);
+      ret = pthread_join(connect_thread, NULL);
       PTHREAD_ERROR_HELPER(ret, "[MAIN] Unable to join connect thread");
 
       continue;
@@ -689,6 +718,8 @@ int main(int argc, char* argv[]){
   }
 
   fprintf(stdout, "\n[MAIN] catched signal CTRL-C...\n");
+
+  send_msg(socket_desc, "DISCONNECT");
 
   fprintf(stdout, "[MAIN] closing socket descriptors...\n");
 
@@ -708,6 +739,7 @@ int main(int argc, char* argv[]){
 
   free(USERNAME);
   free(username_buf_server);
+  free(buf_commands);
 
   fprintf(stdout, "[MAIN] exiting main process\n\n");
 
