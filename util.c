@@ -79,6 +79,6 @@ GHashTable* thread_ref_init(){
   return list;
 }
 
-GQueue* mailbox_queue_init(){
-  return g_queue_new_full((GDestroyNotify) free_mailbox);
+GAsyncQueue* mailbox_queue_init(){
+  return g_async_queue_new_full((GDestroyNotify) free_mailbox);
 }

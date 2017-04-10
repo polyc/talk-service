@@ -1,7 +1,7 @@
 #ifndef __COMMON_H__
 #define __COMMON_H__
 
-#define SERVER_IP "192.168.1.12"
+#define SERVER_IP "127.0.0.1"
 #define SERVER_PORT 2015
 #define CLIENT_THREAD_LISTEN_PORT 1025
 #define CLIENT_THREAD_RECEIVER_PORT 1026
