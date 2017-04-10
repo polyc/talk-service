@@ -587,9 +587,9 @@ int main(int argc, char* argv[]){
   disconnect  = (char*)malloc(sizeof(char));
 
   //copying availability commands into buffers
-  memcpy(available,   "a", 1);
+  memcpy(available,   "a" , 1);
   memcpy(unavailable, "u", 1);
-  memcpy(disconnect,  "d", 1);
+  memcpy(disconnect,  "c", 1);
 
   //initializing username buffer
   USERNAME = (char*)malloc(USERNAME_BUF_SIZE*sizeof(char));
@@ -741,12 +741,6 @@ int main(int argc, char* argv[]){
   //sending disconnect command to server
   send_msg(socket_desc, disconnect);
 
-  fprintf(stdout, "[MAIN] closing socket descriptors...\n");
-
-  // close client main process socket
-  ret = close(socket_desc);
-  ERROR_HELPER(ret, "[MAIN] Cannot close socket_desc");
-
   fprintf(stdout, "[MAIN] destroying semaphores....\n");
 
   ret = sem_destroy(&sync_userList);
@@ -760,6 +754,12 @@ int main(int argc, char* argv[]){
   free(USERNAME);
   free(username_buf_server);
   free(buf_commands);
+
+  fprintf(stdout, "[MAIN] closing socket descriptors...\n");
+
+  // close client main process socket
+  ret = close(socket_desc);
+  ERROR_HELPER(ret, "[MAIN] Cannot close socket_desc");
 
   fprintf(stdout, "[MAIN] exiting main process\n\n");
 
