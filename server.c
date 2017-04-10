@@ -22,6 +22,7 @@ sem_t changes_queue_mutex;
 sem_t thread_count_mutex;
 GHashTable* user_list;
 GHashTable* thread_ref;
+GAsyncQueue* mailbox_queue;
 int thread_count;
 
 void update_availability(usr_list_elem_t* elem_to_update, char* buf_command){
@@ -46,13 +47,11 @@ void remove_entry(char* elem_to_remove){//to befinished
   return;
 }
 
-//pushing message into sender thread personal hash table changelog
-void push_entry(char* parsed_message, GAsyncQueue* queue){
-  g_async_queue_push (queue, (gpointer)parsed_message);
+//pushing message into sender thread personal AsyncQueue
+void push_entry(char* parsed_message){
+  g_async_queue_push(mailbox_queue, (gpointer)parsed_message);
   return;
 }
-
-void message_broadcast(){}
 
 //sender retrieve message from its queue
 void pop_entry(){}
@@ -63,7 +62,7 @@ void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_
   ERROR_HELPER(ret, "[SENDING LIST]: cannot wait on user_list_mutex");
 
   char buf[USERNAME_BUF_SIZE] = {0};
-  stringify_user_element(&buf, value, key, NEW);
+  serialize_user_element(&buf, value, key, NEW);
 
   fprintf(stdout, "[SENDING LIST][USERNAME]: %s\n", (char*)key);
   fprintf(stdout,"[SENDING LIST][IP]: %s\n", (char*)((usr_list_elem_t*)value)->client_ip);
@@ -85,14 +84,15 @@ void receive_and_execute_command(thread_args_t* args, char* buf_command, usr_lis
   switch(*buf_command){
     case UNAVAILABLE :
       update_availability(element_to_update, buf_command);
-
+      push_entry(build_mailbox_message(args->client_user_name, buf_command));
       break;
     case AVAILABLE :
       update_availability(element_to_update, buf_command);
-
+      push_entry(build_mailbox_message(args->client_user_name, buf_command));
       break;
     case DISCONNECT:
-      //remove entry
+      remove_entry(element_to_update);
+      push_entry(build_mailbox_message(args->client_user_name, buf_command));
       //thread's close operations;
       break;//never executed beacuse in close operations, the thread exit safely
     default :
@@ -102,12 +102,21 @@ void receive_and_execute_command(thread_args_t* args, char* buf_command, usr_lis
   return;
 }
 
+char* build_mailbox_message(char* username, char* buf_command) {
+  char* ret = (char*)malloc(MESSAGE_SIZE*sizeof(char));
+  *ret = "";
+  ret[0] = buf_command;
+  strcat(ret, "-");
+  strcat(ret, username);
+  strcat(ret ,"-\n");
+  return ret;
+}
+
 //transform a usr_list_elem_t in a string according to mod_command
-void stringify_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command){
+void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command){
   fprintf(stdout, "[SENDER THREAD]: sono dentro la funzione di serializzazione\n");
   *buf_out = "";
   buf_out[0] = mod_command;
-  //strcat(buf_out, &mod_command);
   strcat(buf_out, "-");
   strcat(buf_out, buf_username);
   fprintf(stdout, "[SENDER THREAD]: maremma maiala\n");
@@ -224,11 +233,14 @@ int main(int argc, char const *argv[]) {
 
   thread_count = 0;
 
-  //generating server userlist
+  //init server userlist
   user_list = usr_list_init();
 
-  //generating server thread manipulation hash table
+  //init server thread manipulation hash table
   thread_ref = thread_ref_init();
+
+  //init mailbox for sender threads
+  mailbox_queue = mailbox_queue_init();
 
   //init user_list_mutex
   ret = sem_init(&user_list_mutex, 0, 1);
