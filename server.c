@@ -77,9 +77,11 @@ void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_
 }
 
 void receive_and_execute_command(thread_args_t* args, char* buf_command, usr_list_elem_t* element_to_update){
-  int ret = recv_msg(args->socket, buf_command, 1);
+  int ret = recv_msg(args->socket, buf_command, 2);
   ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot receive server command from client");
-
+  fprintf(stdout, "buf_command:%s\n", buf_command);
+  strtok(buf_command, "\n");
+  fprintf(stdout, "buf_command:%s\n", buf_command);
   //selecting correct command
   switch(*buf_command){
     case UNAVAILABLE :
@@ -188,6 +190,7 @@ void* connection_handler(void* arg){
   char* buf_command = (char*)calloc(2, sizeof(char));
 
   while(1){
+    fprintf(stdout, "aoooooooooo\n");
     receive_and_execute_command(args, buf_command, element);
   }
   /*CLOSE OPERATIONS (TO BE WRITTEN IN A FUNCTION)
