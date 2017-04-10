@@ -89,9 +89,9 @@ void* listen_routine(void* args){
     struct sockaddr_in* client_address = (struct sockaddr_in*)calloc(1, sizeof(struct sockaddr_in));
     socklen_t client_address_len = sizeof(client_address);
 
-    sem_getvalue(&sync_connect_listen, sem_value);
+    sem_getvalue(&sync_connect_listen, &sem_value);
 
-    if(sem_value<1){
+    if(sem_value < 1){
       continue;
     }
 
@@ -650,7 +650,7 @@ int main(int argc, char* argv[]){
   while(keepRunning){
 
     bzero(buf_commands, 8);
-
+    fprintf(stdout, "[MAIN] exit/connect: ");
     fgets(buf_commands, 8+1, stdin);
 
     if(strcmp(buf_commands, "connect\n")==0){
