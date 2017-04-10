@@ -31,9 +31,7 @@ char* disconnect;
 static volatile int keepRunning = 1;
 
 void main_interrupt_handler(int dummy){
-
     keepRunning = 0;
-
 }
 
 static void print_userList(gpointer key, gpointer elem, gpointer data){
@@ -505,7 +503,7 @@ void* usr_list_recv_thread_routine(void* args){
       ret = recv_msg(rec_socket, buf, USERLIST_BUFF_SIZE);
 
       if(ret==-1){
-        break;
+        continue;
       }
 
       fprintf(stderr, "[RECV_THREAD_ROUTINE] accepted connection from server\n");
@@ -588,8 +586,8 @@ int main(int argc, char* argv[]){
 
   //copying availability commands into buffers
   memcpy(available,   "a" , 1);
-  memcpy(unavailable, "u", 1);
-  memcpy(disconnect,  "c", 1);
+  memcpy(unavailable, "u",  1);
+  memcpy(disconnect,  "c",  1);
 
   //initializing username buffer
   USERNAME = (char*)malloc(USERNAME_BUF_SIZE*sizeof(char));
@@ -697,6 +695,8 @@ int main(int argc, char* argv[]){
   pthread_t connect_thread;
 
   while(keepRunning){
+
+    //if(sem_sync_connect_listen < 0){continue;}
 
     bzero(buf_commands, 8);
     fprintf(stdout, "[MAIN] exit/connect: ");
