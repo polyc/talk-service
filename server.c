@@ -40,7 +40,7 @@ void update_availability(usr_list_elem_t* elem_to_update, char* buf_command){
 
 void remove_entry(char* elem_to_remove){//to befinished
   int ret = REMOVE(user_list, elem_to_remove); //remove entry
-  if(ret == 0){
+  if(ret == FALSE){
     ret = -1;
     ERROR_HELPER(ret, "[CONNECTION THREAD][REMOVING ENTRY]: remove entry failed");
   }
@@ -78,21 +78,24 @@ void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_
 
 void receive_and_execute_command(thread_args_t* args, char* buf_command, usr_list_elem_t* element_to_update){
   int ret = recv_msg(args->socket, buf_command, 1);
-  ERROR_HELPER(ret, "cannot receive server command from client");
+  ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot receive server command from client");
 
   //selecting correct command
   switch(*buf_command){
     case UNAVAILABLE :
       update_availability(element_to_update, buf_command);
       push_entry(build_mailbox_message(args->client_user_name, buf_command));
+      fprintf(stdout, "[CONNECTION THREAD]: unavailable command processed\n");
       break;
     case AVAILABLE :
       update_availability(element_to_update, buf_command);
       push_entry(build_mailbox_message(args->client_user_name, buf_command));
+      fprintf(stdout, "[CONNECTION THREAD]: available command procesed\n");
       break;
     case DISCONNECT:
       remove_entry(element_to_update);
       push_entry(build_mailbox_message(args->client_user_name, buf_command));
+      fprintf(stdout, "[CONNECTION THREAD]: disconnect command processed\n");
       //thread's close operations;
       break;//never executed beacuse in close operations, the thread exit safely
     default :
