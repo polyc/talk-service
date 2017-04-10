@@ -16,6 +16,12 @@
 #define LOOKUP    g_hash_table_lookup
 #define FOR_EACH  g_hash_table_foreach
 
+//Glib AsyncQueue macros
+#define REF g_async_queu_ref
+#define UNREF g_async_queu_unref
+#define PUSH g_async_queue_push
+#define POP g_async_queue_pop
+
 //server commands macros
 #define AVAILABLE   'a'
 #define UNAVAILABLE 'u'
