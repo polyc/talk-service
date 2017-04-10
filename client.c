@@ -24,6 +24,9 @@ sem_t sync_connect_listen;
 GHashTable* user_list;
 
 char* USERNAME;
+char* available;
+char* unavailable;
+char* disconnect;
 
 static volatile int keepRunning = 1;
 
@@ -99,7 +102,7 @@ void* listen_routine(void* args){
     int client_socket = accept(thread_socket, (struct sockaddr*) &client_address, &client_address_len);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Cannot accept connection on user list receiver thread socket");
 
-    send_msg(arg->socket, UNAVAILABLE);
+    send_msg(arg->socket, unavailable);
 
     ret = sem_wait(&sync_connect_listen);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in wait function on sync_connect_listen semaphore\n");
@@ -113,7 +116,7 @@ void* listen_routine(void* args){
       close(thread_socket);
       free(client_address);
 
-      send_msg(arg->socket, AVAILABLE);
+      send_msg(arg->socket, available);
 
       ret = sem_post(&sync_connect_listen);
       ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
@@ -135,7 +138,8 @@ void* listen_routine(void* args){
 
     chat_session(client_username, client_socket);
 
-    send_msg(arg->socket, AVAILABLE);
+    //sending availability to server
+    send_msg(arg->socket, available);
 
     ret = sem_post(&sync_connect_listen);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
@@ -154,14 +158,16 @@ void* connect_routine(void* args){
 
   client_thread_args_t* arg = (client_thread_args_t*)args;
 
-  send_msg(arg->socket, UNAVAILABLE);
+  //sending availability to server
+  send_msg(arg->socket, unavailable);
 
-
+  //if no users connected exit connect_routine
   if(g_hash_table_size(user_list) == 0){
     fprintf(stdout, "[CONNECT_ROUTINE] No user to connect to...Sorry\n");
     pthread_exit(NULL);
   }
 
+  //mutual exlusion on user_list hashtable
   ret = sem_wait(&sync_userList);
   ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in wait function on sync_userList semaphore\n");
 
@@ -202,7 +208,9 @@ void* connect_routine(void* args){
     if(strcmp(target, "exit connect")==0){
 
       fprintf(stdout, "[CONNECT_ROUTINE] exiting connect routine\n");
-      send_msg(arg->socket, AVAILABLE);
+
+      //sending availability to server
+      send_msg(arg->socket, available);
 
       ret = sem_post(&sync_connect_listen);
       ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
@@ -247,7 +255,8 @@ void* connect_routine(void* args){
 
   chat_session(target, connect_socket);
 
-  send_msg(arg->socket, AVAILABLE);
+  //sending availability to server
+  send_msg(arg->socket, available);
 
   ret = sem_post(&sync_connect_listen);
   ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
@@ -572,6 +581,16 @@ int main(int argc, char* argv[]){
   //initializing GLibHashTable for user list
   user_list = usr_list_init();
 
+  //alocating buffers for availability
+  available   = (char*)malloc(sizeof(char));
+  unavailable = (char*)malloc(sizeof(char));
+  disconnect  = (char*)malloc(sizeof(char));
+
+  //copying availability commands into buffers
+  memcpy(available,   "a", 1);
+  memcpy(unavailable, "u", 1);
+  memcpy(disconnect,  "d", 1);
+
   //initializing username buffer
   USERNAME = (char*)malloc(USERNAME_BUF_SIZE*sizeof(char));
 
@@ -719,7 +738,8 @@ int main(int argc, char* argv[]){
 
   fprintf(stdout, "\n[MAIN] catched signal CTRL-C...\n");
 
-  send_msg(socket_desc, DISCONNECT);
+  //sending disconnect command to server
+  send_msg(socket_desc, disconnect);
 
   fprintf(stdout, "[MAIN] closing socket descriptors...\n");
 
