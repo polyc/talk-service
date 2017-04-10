@@ -64,6 +64,11 @@ void free_user_list_element_key(gpointer data){
   return;
 }
 
+//free mailbox entry
+void free_mailbox(gpointer data){
+  free(data);
+}
+
 GHashTable* usr_list_init(){
   GHashTable* list = g_hash_table_new_full(g_str_hash, g_str_equal, (GDestroyNotify)free_user_list_element_key, (GDestroyNotify)free_user_list_element_value);
   return list;
@@ -74,6 +79,6 @@ GHashTable* thread_ref_init(){
   return list;
 }
 
-GQueue* changes_queue_init(){
-  return g_queue_new();
+GQueue* mailbox_queue_init(){
+  return g_queue_new_full((GDestroyNotify) free_mailbox);
 }
