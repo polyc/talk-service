@@ -79,28 +79,25 @@ void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_
   return;
 }
 
-void receive_and_execute_command(thread_args_t* args, char* buf_command, usr_list_elem_t* element_to_update){
+void execute_command(thread_args_t* args, char buf_command, usr_list_elem_t* element_to_update){
 
-  int ret = recv_msg(args->socket, buf_command, strlen(buf_command));
-  ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot receive server command from client");
-
-  fprintf(stdout, "[CONNECTION THREAD] buf_command: %s di lunghezza: %d\n", buf_command, strlen(buf_command));
+  fprintf(stdout, "[CONNECTION THREAD] buf_command: %c\n", buf_command);
 
   //selecting correct command
-  switch(buf_command[0]){
+  switch(buf_command){
     case UNAVAILABLE :
-      update_availability(element_to_update, buf_command);
-      push_entry(build_mailbox_message(args->client_user_name, buf_command));
+      update_availability(element_to_update, &buf_command);
+      push_entry(build_mailbox_message(args->client_user_name, &buf_command));
       fprintf(stdout, "[CONNECTION THREAD]: unavailable command processed\n");
       break;
     case AVAILABLE :
-      update_availability(element_to_update, buf_command);
-      push_entry(build_mailbox_message(args->client_user_name, buf_command));
+      update_availability(element_to_update, &buf_command);
+      push_entry(build_mailbox_message(args->client_user_name, &buf_command));
       fprintf(stdout, "[CONNECTION THREAD]: available command procesed\n");
       break;
     case DISCONNECT:
       remove_entry(element_to_update);
-      push_entry(build_mailbox_message(args->client_user_name, buf_command));
+      push_entry(build_mailbox_message(args->client_user_name, &buf_command));
       fprintf(stdout, "[CONNECTION THREAD]: disconnect command processed\n");
       //thread's close operations;
       break;//never executed beacuse in close operations, the thread exit safely
@@ -108,7 +105,6 @@ void receive_and_execute_command(thread_args_t* args, char* buf_command, usr_lis
       //throw error
       return;
   }
-  *buf_command = ""; //buffer cleanup
   return;
 }
 
@@ -202,11 +198,15 @@ void* connection_handler(void* arg){
   ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot post on chandler_sender_sync");
 
   //command receiver buffer
-  char* buf_command = (char*)malloc(2* sizeof(char));
+  char buf_command = "";
 
   while(1){
-    receive_and_execute_command(args, buf_command, element);
+    /*int ret = recv_msg(args->socket, buf_command, 1); TO BE FIXED
+    ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot receive server command from client");
+
+    execute_command(args, buf_command, element);*/
   }
+
   /*CLOSE OPERATIONS (TO BE WRITTEN IN A FUNCTION)
   ret = close(args->socket);//close client_desc
   ERROR_HELPER(ret, "Cannot close socket for incoming connection");
