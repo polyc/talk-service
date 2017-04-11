@@ -79,12 +79,14 @@ void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_
   return;
 }
 
-void execute_command(thread_args_t* args, char buf_command, usr_list_elem_t* element_to_update){
-
-  fprintf(stdout, "[CONNECTION THREAD] buf_command: %c\n", buf_command);
+void execute_command(thread_args_t* args, char* buf_command, usr_list_elem_t* element_to_update){
 
   //selecting correct command
-  switch(buf_command){
+  char c = buf_command[0];
+
+  fprintf(stdout, "[CONNECTION THREAD] buf_command: %c\n", c);
+
+  switch(c){
     case UNAVAILABLE :
       update_availability(element_to_update, &buf_command);
       push_entry(build_mailbox_message(args->client_user_name, &buf_command));
@@ -198,13 +200,14 @@ void* connection_handler(void* arg){
   ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot post on chandler_sender_sync");
 
   //command receiver buffer
-  char buf_command = "";
+  char* buf_command = (char*)calloc(2,sizeof(char));
 
   while(1){
-    /*int ret = recv_msg(args->socket, buf_command, 1); TO BE FIXED
+
+    int ret = recv_msg(args->socket, buf_command, 2); //TO BE FIXED
     ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot receive server command from client");
 
-    execute_command(args, buf_command, element);*/
+    execute_command(args, buf_command, element);
   }
 
   /*CLOSE OPERATIONS (TO BE WRITTEN IN A FUNCTION)

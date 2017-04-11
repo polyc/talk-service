@@ -100,7 +100,7 @@ void* listen_routine(void* args){
     int client_socket = accept(thread_socket, (struct sockaddr*) &client_address, &client_address_len);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Cannot accept connection on user list receiver thread socket");
 
-    send_msg(arg->socket, unavailable);
+    //send_msg(arg->socket, unavailable);
 
     ret = sem_wait(&sync_connect_listen);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in wait function on sync_connect_listen semaphore\n");
@@ -114,7 +114,7 @@ void* listen_routine(void* args){
       close(thread_socket);
       free(client_address);
 
-      send_msg(arg->socket, available);
+      //send_msg(arg->socket, available);
 
       ret = sem_post(&sync_connect_listen);
       ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
@@ -137,7 +137,7 @@ void* listen_routine(void* args){
     chat_session(client_username, client_socket);
 
     //sending availability to server
-    send_msg(arg->socket, available);
+    //send_msg(arg->socket, available);
 
     ret = sem_post(&sync_connect_listen);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
@@ -158,6 +158,7 @@ void* connect_routine(void* args){
 
   //sending availability to server
   send_msg(arg->socket, unavailable);
+  fprintf(stdout, "[CONNECT_ROUTINE] unavailable:  %s\n", unavailable);
 
   //if no users connected exit connect_routine
   if(g_hash_table_size(user_list) == 0){
@@ -580,14 +581,16 @@ int main(int argc, char* argv[]){
   user_list = usr_list_init();
 
   //alocating buffers for availability
-  available   = (char*)malloc(sizeof(char));
-  unavailable = (char*)malloc(sizeof(char));
-  disconnect  = (char*)malloc(sizeof(char));
+  available   = (char*)calloc(2,sizeof(char));
+  unavailable = (char*)calloc(2,sizeof(char));
+  disconnect  = (char*)calloc(2,sizeof(char));
 
   //copying availability commands into buffers
-  memcpy(available,   "a" , 1);
-  memcpy(unavailable, "u",  1);
-  memcpy(disconnect,  "c",  1);
+  strcpy(available,   "a\n");
+  strcpy(unavailable, "u\n");
+  strcpy(disconnect,  "c\n");
+
+  fprintf(stdout, "[MAIN][BUFF_TEST] %c, %c, %s", available[0], unavailable[0], disconnect);
 
   //initializing username buffer
   USERNAME = (char*)malloc(USERNAME_BUF_SIZE*sizeof(char));
