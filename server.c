@@ -21,7 +21,6 @@ sem_t user_list_mutex; // mutual exclusion to acces user list hash-table
 sem_t changes_queue_mutex;
 sem_t thread_count_mutex;
 GHashTable* user_list;
-GHashTable* thread_ref;
 GAsyncQueue* mailbox_queue;
 int thread_count;
 
@@ -121,15 +120,15 @@ char* build_mailbox_message(char* username, char* buf_command) {
 }
 
 void extract_username_from_message(char* message, char* username){
-  fprintf(stdout, "[SENDER THREAD]: extracting username\n");
+  fprintf(stdout, "[SENDER THREAD]: extracting username %s\n", message);
   int i;
   for (i = 2; i < USERNAME_BUF_SIZE; i++) {
-    username[i] = message[i];
     if(message[i] == '-'){
-      i++;
       break;
     }
   }
+  strncpy(username, message + 2, i-2);
+  fprintf(stdout, "*********************%s\n", username);
   return;
 }
 
@@ -159,7 +158,7 @@ void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_user
   else{
     strcat(buf_out, "-");
 
-    if(elem->a_flag == AVAILABLE){
+    if((elem->a_flag) == AVAILABLE){
       strcat(buf_out, "a");
       strcat(buf_out, "-\n");
       return;
@@ -203,9 +202,8 @@ void* connection_handler(void* arg){
   ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
 
   //unlock sender thread
-  //retrieving semphore
-  sem_t* sem = (sem_t*)LOOKUP(thread_ref, args->client_user_name);
-  ret = sem_post(sem);
+  fprintf(stdout, "%s\n", args->client_user_name);
+  ret = sem_post(args->chandler_sender_sync);
   ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot post on chandler_sender_sync");
 
   //command receiver buffer
@@ -272,6 +270,7 @@ void* sender_routine(void* arg){
     //extract command from message
     buf_command[0] = message[1];
     //extract username from message
+    fprintf(stdout, "**************%s\n", message);
     extract_username_from_message(message, username);
     free(message);
 
@@ -279,6 +278,8 @@ void* sender_routine(void* arg){
     ret = sem_wait(&user_list_mutex);//wait for other threads
     ERROR_HELPER(ret, "[SENDER THREAD]: cannot wait on user_list_mutex semaphore");
     usr_list_elem_t* element_to_serialize = (usr_list_elem_t*)LOOKUP(user_list, username);
+    fprintf(stdout, "%s\n", element_to_serialize->client_ip);
+    fprintf(stdout, "%c\n", element_to_serialize->a_flag);
     //serializing message
     serialize_user_element(send_buf, element_to_serialize, username, *buf_command);
 
@@ -308,9 +309,6 @@ int main(int argc, char const *argv[]) {
 
   //init server userlist
   user_list = usr_list_init();
-
-  //init server thread manipulation hash table
-  thread_ref = thread_ref_init();
 
   //init mailbox for sender threads
   mailbox_queue = mailbox_queue_init();
@@ -363,32 +361,35 @@ int main(int argc, char const *argv[]) {
       //parsing client ip in dotted form
       char* client_ip_buf = inet_ntoa(client_addr->sin_addr);
 
-      //thread spawning
-
-      //client management thread
-      // put arguments for the new thread into a buffer
-      thread_args_t* thread_args = (thread_args_t*)malloc(sizeof(thread_args_t));
-      thread_args->socket           = client_desc;
-      thread_args->client_user_name = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
-      thread_args->client_ip        = (char*)malloc(INET_ADDRSTRLEN*sizeof(char));
-      memcpy(thread_args->client_ip, client_ip_buf, INET_ADDRSTRLEN);
-
-      //sender thread args
-      sender_thread_args_t* sender_args = (sender_thread_args_t*)malloc(sizeof(sender_thread_args_t));
-
+      //semaphore for sync a pair of chandler/sender
       sem_t* chandler_sender_sync = (sem_t*)malloc(sizeof(sem_t));
-
-      sender_args->chandler_sender_sync = chandler_sender_sync;
       ret = sem_init(chandler_sender_sync, 0, 0);
       ERROR_HELPER(ret, "[MAIN]:cannot init chandler_sender_sync sempahore");
 
+      //thread spawning
+
+      //client handler thread
+      //arguments allocation
+      char* client_user_name = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
+      char* client_ip = (char*)malloc(INET_ADDRSTRLEN*sizeof(char));
+      memcpy(client_ip, client_ip_buf, INET_ADDRSTRLEN);
+
+      thread_args_t* thread_args = (thread_args_t*)malloc(sizeof(thread_args_t));
+      thread_args->socket               = client_desc;
+      thread_args->client_user_name     = client_user_name;
+      thread_args->client_ip            = client_ip;
+      thread_args->chandler_sender_sync = chandler_sender_sync;
+
+
+      //sender thread args
+      //arguments allocation
+      sender_thread_args_t* sender_args = (sender_thread_args_t*)malloc(sizeof(sender_thread_args_t));
+
+      sender_args->chandler_sender_sync = chandler_sender_sync;
       sender_args->client_ip = (char*)malloc(sizeof(INET_ADDRSTRLEN));
       memcpy(sender_args->client_ip, client_ip_buf, INET_ADDRSTRLEN);
 
-      fprintf(stderr, "[MAIN]: allocati argomenti per il sender thread\n");
-
-      //inserting semphore in hash table. cHandler thread need to wait on this
-      INSERT(thread_ref, (gpointer)thread_args->client_user_name, (gpointer)chandler_sender_sync);
+      fprintf(stderr, "[MAIN]: preparati argomenti per il sender thread\n");
 
       //receiving username
       char* buf = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
@@ -417,6 +418,9 @@ int main(int argc, char const *argv[]) {
       ret = pthread_create(&thread_sender, NULL, sender_routine, (void*)sender_args);
       PTHREAD_ERROR_HELPER(ret, "Could not create sender thread");
 
+      ret = pthread_detach(thread_sender);
+      PTHREAD_ERROR_HELPER(ret, "Could not detach thread");
+
       fprintf(stderr, "[MAIN]: spawnato sender thread\n");
 
       //new buffer for new incoming connection
@@ -427,9 +431,6 @@ int main(int argc, char const *argv[]) {
       sem_wait(&thread_count_mutex);
       thread_count++;
       sem_post(&thread_count_mutex);
-
-      ret = pthread_detach(thread_sender);
-      PTHREAD_ERROR_HELPER(ret, "Could not detach thread");
 
       fprintf(stderr, "[MAIN]: fine loop di accettazione connessione in ingresso, inizio nuova iterazione\n");
     }

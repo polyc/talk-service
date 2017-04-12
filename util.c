@@ -74,11 +74,6 @@ GHashTable* usr_list_init(){
   return list;
 }
 
-GHashTable* thread_ref_init(){
-  GHashTable* list = g_hash_table_new(g_str_hash, g_str_equal);
-  return list;
-}
-
 GAsyncQueue* mailbox_queue_init(){
   return g_async_queue_new_full((GDestroyNotify) free_mailbox);
 }
