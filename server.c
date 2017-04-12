@@ -135,12 +135,12 @@ void extract_username_from_message(char* message, char* username){
 
 //transform a usr_list_elem_t in a string according to mod_command
 void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command){
-  fprintf(stdout, "[SENDER THREAD]: sono dentro la funzione di serializzazione\n");
+  fprintf(stdout, "[SERIALIZE]: sono dentro la funzione di serializzazione\n");
   *buf_out = "";
   buf_out[0] = mod_command;
   strcat(buf_out, "-");
   strcat(buf_out, buf_username);
-  fprintf(stdout, "[SENDER THREAD]: maremma maiala\n");
+  fprintf(stdout, "[SERIALIZE]: maremma maiala\n");
 
 
   if(mod_command == DELETE){
@@ -155,11 +155,20 @@ void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_user
     strcat(buf_out, "-\n");
     return;
   }
-  else{//mod_command == MOD
+
+  else{
     strcat(buf_out, "-");
-    strcat(buf_out, &(elem->a_flag));
-    strcat(buf_out, "-\n");
-    return;
+
+    if(elem->a_flag == AVAILABLE){
+      strcat(buf_out, "a");
+      strcat(buf_out, "-\n");
+      return;
+    }
+    else{
+      strcat(buf_out, "u");
+      strcat(buf_out, "-\n");
+      return;
+    }
   }
 }
 
@@ -364,6 +373,23 @@ int main(int argc, char const *argv[]) {
       thread_args->client_ip        = (char*)malloc(INET_ADDRSTRLEN*sizeof(char));
       memcpy(thread_args->client_ip, client_ip_buf, INET_ADDRSTRLEN);
 
+      //sender thread args
+      sender_thread_args_t* sender_args = (sender_thread_args_t*)malloc(sizeof(sender_thread_args_t));
+
+      sem_t* chandler_sender_sync = (sem_t*)malloc(sizeof(sem_t));
+
+      sender_args->chandler_sender_sync = chandler_sender_sync;
+      ret = sem_init(chandler_sender_sync, 0, 0);
+      ERROR_HELPER(ret, "[MAIN]:cannot init chandler_sender_sync sempahore");
+
+      sender_args->client_ip = (char*)malloc(sizeof(INET_ADDRSTRLEN));
+      memcpy(sender_args->client_ip, client_ip_buf, INET_ADDRSTRLEN);
+
+      fprintf(stderr, "[MAIN]: allocati argomenti per il sender thread\n");
+
+      //inserting semphore in hash table. cHandler thread need to wait on this
+      INSERT(thread_ref, (gpointer)thread_args->client_user_name, (gpointer)chandler_sender_sync);
+
       //receiving username
       char* buf = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
       ret = recv_msg(client_desc , buf, USERNAME_BUF_SIZE);
@@ -386,22 +412,6 @@ int main(int argc, char const *argv[]) {
       PTHREAD_ERROR_HELPER(ret, "Could not detach thread");
 
       fprintf(stderr, "[MAIN]:spawnato connection thread per il client accettato\n");
-
-      //sender thread args and spawning
-      sender_thread_args_t* sender_args = (sender_thread_args_t*)malloc(sizeof(sender_thread_args_t));
-
-      sender_args->chandler_sender_sync = (sem_t*)malloc(sizeof(sem_t));
-      ret = sem_init(sender_args->chandler_sender_sync, 0, 0);
-      ERROR_HELPER(ret, "[MAIN]:cannot init chandler_sender_sync sempahore");
-
-      sender_args->client_ip = (char*)malloc(sizeof(INET_ADDRSTRLEN));
-      memcpy(sender_args->client_ip, client_ip_buf, INET_ADDRSTRLEN);
-
-      fprintf(stderr, "[MAIN]: allocati argomenti per il sender thread\n");
-
-      //inserting semphore in hash table. cHandler thread need to wait on this
-      INSERT(thread_ref, (gpointer)thread_args->client_user_name, (gpointer)sender_args->chandler_sender_sync);
-
 
       pthread_t thread_sender;
       ret = pthread_create(&thread_sender, NULL, sender_routine, (void*)sender_args);
