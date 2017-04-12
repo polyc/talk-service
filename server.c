@@ -81,24 +81,24 @@ void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_
 void execute_command(thread_args_t* args, char* buf_command, usr_list_elem_t* element_to_update){
 
   //selecting correct command
-  char c = buf_command[0];
+  char command = buf_command[0];
 
-  fprintf(stdout, "[CONNECTION THREAD] buf_command: %c\n", c);
+  fprintf(stdout, "[CONNECTION THREAD] buf_command: %c\n", command);
 
-  switch(c){
+  switch(command){
     case UNAVAILABLE :
-      update_availability(element_to_update, &buf_command);
-      push_entry(build_mailbox_message(args->client_user_name, &buf_command));
+      update_availability(element_to_update, &command);
+      push_entry(build_mailbox_message(args->client_user_name, &command));
       fprintf(stdout, "[CONNECTION THREAD]: unavailable command processed\n");
       break;
     case AVAILABLE :
-      update_availability(element_to_update, &buf_command);
-      push_entry(build_mailbox_message(args->client_user_name, &buf_command));
+      update_availability(element_to_update, &command);
+      push_entry(build_mailbox_message(args->client_user_name, &command));
       fprintf(stdout, "[CONNECTION THREAD]: available command procesed\n");
       break;
     case DISCONNECT:
       remove_entry(element_to_update);
-      push_entry(build_mailbox_message(args->client_user_name, &buf_command));
+      push_entry(build_mailbox_message(args->client_user_name, &command));
       fprintf(stdout, "[CONNECTION THREAD]: disconnect command processed\n");
       //thread's close operations;
       break;//never executed beacuse in close operations, the thread exit safely
