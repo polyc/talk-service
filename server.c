@@ -26,11 +26,12 @@ int thread_count;
 
 void update_availability(usr_list_elem_t* elem_to_update, char* buf_command){
   //updating user_list
+  fprintf(stdout, "SONO QUI\n" );
   int ret = sem_wait(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD][UPDATING AVAILABILITY]: cannot wait on user_list_mutex");
 
   elem_to_update->a_flag = *buf_command; //update availability flag
-
+  fprintf(stdout, "AOOOOOOO\n" );
   ret = sem_post(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD][UPDATING AVAILABILITY]: cannot post on user_list_mutex");
 
@@ -182,6 +183,9 @@ void* connection_handler(void* arg){
 
   int ret;
 
+  //ret = fcntl(args->socket, F_SETFL, fcntl(args->socket, F_GETFL) | O_NONBLOCK);
+  //ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot set socket in non-blocking mode");
+
   fprintf(stderr, "[CONNECTION THREAD]: allocazione user element da inserire nella lista\n");
 
   //user list element
@@ -272,7 +276,8 @@ void* sender_routine(void* arg){
 
   while(1){
     fprintf(stdout, "popping message from mailbox\n");
-    char* message = POP(my_mailbox); //blocked if there are no message
+    char* message = POP(my_mailbox, (guint64)POP_TIMEOUT);
+    if(message == NULL)continue;
     //extract command from message
     buf_command[0] = message[0];
     //extract username from message
@@ -288,7 +293,7 @@ void* sender_routine(void* arg){
     serialize_user_element(send_buf, element_to_serialize, username, buf_command[0]);
     fprintf(stdout, "[SENDER THREAD]: message serialized = %s\n", send_buf);
 
-    ret = sem_wait(&user_list_mutex);//unlock semaphore
+    ret = sem_post(&user_list_mutex);//unlock semaphore
     ERROR_HELPER(ret, "[SENDER THREAD]: cannot post on user_list_mutex semaphore");
 
     //sending message to client's receiver thread

@@ -7,6 +7,7 @@
 #define CLIENT_THREAD_RECEIVER_PORT 1026
 #define USERNAME_BUF_SIZE 17
 #define USERLIST_BUFF_SIZE 7 + USERNAME_BUF_SIZE + INET_ADDRSTRLEN
+#define POP_TIMEOUT 2000000
 
 //Glib hash manipulation macros
 #define INSERT    g_hash_table_insert
@@ -20,7 +21,7 @@
 #define REF g_async_queue_ref
 #define UNREF g_async_queue_unref
 #define PUSH g_async_queue_push
-#define POP g_async_queue_pop
+#define POP g_async_queue_timeout_pop
 
 //server commands macros
 #define AVAILABLE   'a'
