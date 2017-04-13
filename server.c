@@ -78,27 +78,31 @@ void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_
   return;
 }
 
-void execute_command(thread_args_t* args, char* buf_command, usr_list_elem_t* element_to_update){
+void execute_command(thread_args_t* args, char* availability_buf, usr_list_elem_t* element_to_update){
 
   //selecting correct command
-  char command = buf_command[0];
+  char availability = availability_buf[0];
+  char mod_command;
 
-  fprintf(stdout, "[CONNECTION THREAD] buf_command: %c\n", command);
+  fprintf(stdout, "[CONNECTION THREAD] availability: %c\n", availability);
 
-  switch(command){
+  switch(availability){
     case UNAVAILABLE :
-      update_availability(element_to_update, &command);
-      push_entry(build_mailbox_message(args->client_user_name, &command));
+      mod_command = MODIFY;
+      update_availability(element_to_update, &availability);
+      push_entry(build_mailbox_message(args->client_user_name, &mod_command));
       fprintf(stdout, "[CONNECTION THREAD]: unavailable command processed\n");
       break;
     case AVAILABLE :
-      update_availability(element_to_update, &command);
-      push_entry(build_mailbox_message(args->client_user_name, &command));
+      mod_command = MODIFY;
+      update_availability(element_to_update, &availability);
+      push_entry(build_mailbox_message(args->client_user_name, &mod_command));
       fprintf(stdout, "[CONNECTION THREAD]: available command procesed\n");
       break;
     case DISCONNECT:
+      mod_command = DELETE;
       remove_entry(element_to_update);
-      push_entry(build_mailbox_message(args->client_user_name, &command));
+      push_entry(build_mailbox_message(args->client_user_name, &mod_command));
       fprintf(stdout, "[CONNECTION THREAD]: disconnect command processed\n");
       //thread's close operations;
       break;//never executed beacuse in close operations, the thread exit safely
@@ -109,10 +113,10 @@ void execute_command(thread_args_t* args, char* buf_command, usr_list_elem_t* el
   return;
 }
 
-char* build_mailbox_message(char* username, char* buf_command) {
+char* build_mailbox_message(char* username, char* mod_command) {
   char* ret = (char*)malloc(MESSAGE_SIZE*sizeof(char));
   *ret = "";
-  ret[0] = *buf_command;
+  ret[0] = *mod_command;
   strcat(ret, "-");
   strcat(ret, username);
   strcat(ret ,"-\n");
@@ -128,7 +132,6 @@ void extract_username_from_message(char* message, char* username){
     }
   }
   strncpy(username, message + 2, i-2);
-  fprintf(stdout, "*********************%s\n", username);
   return;
 }
 
@@ -266,11 +269,11 @@ void* sender_routine(void* arg){
   char* username = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
 
   while(1){
+    fprintf(stdout, "popping message from mailbox\n");
     char* message = POP(my_mailbox); //blocked if there are no message
     //extract command from message
     buf_command[0] = message[1];
     //extract username from message
-    fprintf(stdout, "**************%s\n", message);
     extract_username_from_message(message, username);
     free(message);
 
@@ -278,16 +281,17 @@ void* sender_routine(void* arg){
     ret = sem_wait(&user_list_mutex);//wait for other threads
     ERROR_HELPER(ret, "[SENDER THREAD]: cannot wait on user_list_mutex semaphore");
     usr_list_elem_t* element_to_serialize = (usr_list_elem_t*)LOOKUP(user_list, username);
-    fprintf(stdout, "%s\n", element_to_serialize->client_ip);
-    fprintf(stdout, "%c\n", element_to_serialize->a_flag);
+
     //serializing message
-    serialize_user_element(send_buf, element_to_serialize, username, *buf_command);
+    serialize_user_element(send_buf, element_to_serialize, username, buf_command[0]);
+    fprintf(stdout, "[SENDER THREAD]: message serialized = %s\n", send_buf);
 
     ret = sem_wait(&user_list_mutex);//unlock semaphore
     ERROR_HELPER(ret, "[SENDER THREAD]: cannot post on user_list_mutex semaphore");
 
     //sending message to client's receiver thread
     send_msg(socket_desc, send_buf);
+    fprintf(stdout, "[SENDER THREAD]: message sended to client's reciever thread\n");
   }
   //CLOSE OPERATIONS TO BE HANDLED BY SIGNAL handler
   UNREF(mailbox_queue);
