@@ -138,7 +138,7 @@ void extract_username_from_message(char* message, char* username){
 //transform a usr_list_elem_t in a string according to mod_command
 void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command){
   fprintf(stdout, "[SERIALIZE]: sono dentro la funzione di serializzazione\n");
-  *buf_out = "";
+  //*buf_out = "";
   buf_out[0] = mod_command;
   strcat(buf_out, "-");
   strcat(buf_out, buf_username);
@@ -159,6 +159,8 @@ void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_user
   }
 
   else{
+    strcat(buf_out, "-");
+    strcat(buf_out, elem->client_ip);
     strcat(buf_out, "-");
 
     if((elem->a_flag) == AVAILABLE){
@@ -272,7 +274,7 @@ void* sender_routine(void* arg){
     fprintf(stdout, "popping message from mailbox\n");
     char* message = POP(my_mailbox); //blocked if there are no message
     //extract command from message
-    buf_command[0] = message[1];
+    buf_command[0] = message[0];
     //extract username from message
     extract_username_from_message(message, username);
     free(message);
