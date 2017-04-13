@@ -194,6 +194,18 @@ void* connect_routine(void* args){
     fgets(target, USERNAME_BUF_SIZE, stdin);
 
     strtok(target, "\n");
+    //strtok(USERNAME, "\n");
+
+    char* username_cpy = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
+    strncpy(username_cpy, USERNAME, USERNAME_BUF_SIZE);
+    strtok(username_cpy, "\n");
+
+    if(strcmp(target, username_cpy)==0){
+
+      fprintf(stdout, "[CONNECT_ROUTINE] Impossible to connect with yourself...\n");
+
+      continue;
+    }
 
     if(strcmp(target, "list")==0){
       ret = sem_wait(&sync_userList);
@@ -205,7 +217,6 @@ void* connect_routine(void* args){
       ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in post function on sync_userList semaphore\n");
 
       continue;
-
     }
 
     if(strcmp(target, "exit connect")==0){
@@ -230,7 +241,7 @@ void* connect_routine(void* args){
     ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in post function on sync_userList semaphore\n");
 
     if(target_elem != NULL){
-      if(target_elem->a_flag == UNAVAILABLE){
+      if((target_elem->a_flag) == UNAVAILABLE){
         fprintf(stdout, "[CONNECT_ROUTINE] Client not available...\n");
         continue;
       }
@@ -682,7 +693,8 @@ int main(int argc, char* argv[]){
     if(ret==1){
       break;
     }
-    USERNAME = realloc(USERNAME, USERNAME_BUF_SIZE); //reallocating buffer for username
+    bzero(USERNAME, USERNAME_BUF_SIZE); //setting buffer to 0
+    strcpy(USERNAME, "");
   }
 
   fprintf(stdout, "[MAIN] got username\n");
