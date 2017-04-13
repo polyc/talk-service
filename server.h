@@ -6,7 +6,6 @@ typedef struct thread_args_s{
   int socket;
   char* client_ip;
   char* client_user_name; //key for both hash table
-  sem_t* chandler_sender_sync;
 } thread_args_t;
 
 typedef struct sender_thread_args_s{
