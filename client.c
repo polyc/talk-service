@@ -100,7 +100,8 @@ void* listen_routine(void* args){
     int client_socket = accept(thread_socket, (struct sockaddr*) &client_address, &client_address_len);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Cannot accept connection on user list receiver thread socket");
 
-    //send_msg(arg->socket, unavailable);
+    //sending unavailability to server
+    send_msg(arg->socket, unavailable);
 
     ret = sem_wait(&sync_connect_listen);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in wait function on sync_connect_listen semaphore\n");
@@ -114,7 +115,8 @@ void* listen_routine(void* args){
       close(thread_socket);
       free(client_address);
 
-      //send_msg(arg->socket, available);
+      //sending availability to server
+      send_msg(arg->socket, available);
 
       ret = sem_post(&sync_connect_listen);
       ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
@@ -134,15 +136,17 @@ void* listen_routine(void* args){
 
     fprintf(stdout, "[LISTEN_ROUTINE] username received\n");
 
-    chat_session(client_username, client_socket);
+    ret = chat_session(client_username, client_socket);
 
     //sending availability to server
-    //send_msg(arg->socket, available);
+    send_msg(arg->socket, available);
 
     ret = sem_post(&sync_connect_listen);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
 
   }
+
+  //rememeber to free stuff
 
 }
 
@@ -248,11 +252,14 @@ void* connect_routine(void* args){
   ret = connect(connect_socket, (struct sockaddr*) &target_addr, sizeof(struct sockaddr_in));
   ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error trying to connect to target");
 
+  //sending username to receiver client so he knows who it is
   send_msg(connect_socket, USERNAME);
 
   fprintf(stdout, "[CONNECT_ROUTINE] Connected to %s passing arguments to chat_session\n", target);
 
-  chat_session(target, connect_socket);
+  //passing username and connected socket to chat session function
+  ret = chat_session(target, connect_socket);
+  //check cheat_session return value
 
   //sending availability to server
   send_msg(arg->socket, available);
@@ -260,7 +267,9 @@ void* connect_routine(void* args){
   ret = sem_post(&sync_connect_listen);
   ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
 
-  fprintf(stdout, "[CONNECT_ROUTINE] exiting connect routine due to CRTL-C signal\n");
+  // close connection to client socket
+  ret = close(connect_socket);
+  ERROR_HELPER(ret, "[CONNECT_ROUTINE] Cannot close connect_socket");
 
   pthread_exit(NULL);
 
@@ -402,6 +411,7 @@ void* read_updates(void* args){
 
     char* elem_buf;
     fprintf(stdout, "[READ_UPDATES] inside while(1)\n");
+
     while(1){
 
       elem_buf = (char*)g_async_queue_try_pop(buf);
@@ -504,7 +514,7 @@ void* usr_list_recv_thread_routine(void* args){
       ret = recv_msg(rec_socket, buf, USERLIST_BUFF_SIZE);
 
       if(ret==-1){
-        continue;
+        //continue;
       }
 
       fprintf(stderr, "[RECV_THREAD_ROUTINE] accepted connection from server\n");
@@ -541,11 +551,75 @@ void* usr_list_recv_thread_routine(void* args){
 
 } //end of thread routine
 
-void* recv_routine(void* args){}
+void* recv_routine(void* args){
 
-void* send_routine(void* args){}
+  int ret;
 
-void chat_session(char* username, int socket){
+  chat_session_args_t* arg = (chat_session_args_t*)args;
+
+  char* buf = (char*)calloc(MSG_LEN, sizeof(char));
+
+  while(1){
+    bzero(buf, MSG_LEN);
+
+
+    ret = recv_msg(arg->socket, buf, MSG_LEN);
+    ERROR_HELPER(ret, "[RECV_ROUTINE] Error in recv_msg");
+
+    if(strcmp(buf, "exit")==0){
+      //do something (Ex. sem_post on a semaphore)
+
+      break;
+    }
+
+    fprintf(stdout, "\n[%s] %s\n", arg->username, buf);
+
+  }
+
+  free(buf);
+  free(arg);
+
+  ret = sem_post(&sync_chat);
+  ERROR_HELPER(ret, "[RECV_ROUTINE] Error in post function on sync_userList semaphore");
+
+}
+
+void* send_routine(void* args){
+
+  int ret;
+
+  chat_session_args_t* arg = (chat_session_args_t*)args;
+
+  char* buf = (char*)calloc(MSG_LEN, sizeof(char));
+
+  while(1){
+    bzero(buf, MSG_LEN);
+
+    fgets(buf, MSG_LEN, stdin);
+
+    strtok(buf, "\n");
+
+    if(strcmp(buf, "exit")==0){
+      //do something
+
+      //sending exit message
+      send_msg(arg->socket, buf);
+      break;
+    }
+
+    send_msg(arg->socket, buf);
+
+  }
+
+  free(buf);
+  free(arg);
+
+  ret = sem_post(&sync_chat);
+  ERROR_HELPER(ret, "[SEND_ROUTINE] Error in post function on sync_userList semaphore\n");
+
+}
+
+int chat_session(char* username, int socket){
 
   int ret;
 
@@ -558,8 +632,9 @@ void chat_session(char* username, int socket){
   pthread_t chat_send;
 
   //initiate arguments for both threads chat_recv and chat_send
-  client_thread_args_t* args = (client_thread_args_t*)malloc(sizeof(client_thread_args_t));
-  args->socket = socket;
+  chat_session_args_t* args = (chat_session_args_t*)malloc(sizeof(chat_session_args_t));
+  args->socket   = socket;
+  args->username = username;
 
   //creating thread chat_recv
   ret = pthread_create(&chat_recv, NULL, recv_routine, (void*)args);
@@ -569,6 +644,11 @@ void chat_session(char* username, int socket){
   ret = pthread_create(&chat_send, NULL, send_routine, (void*)args);
   PTHREAD_ERROR_HELPER(ret, "[CHAT_SESSION] Unable to create chat_send thread");
 
+  //mutual exlusion on chat
+  ret = sem_wait(&sync_chat);
+  ERROR_HELPER(ret, "[CHAT_SESSION] Error in wait function on sync_chat semaphore");
+
+  //wait on semphore for send_routine and recv_routine
 
 }
 
@@ -586,6 +666,7 @@ int main(int argc, char* argv[]){
   disconnect  = (char*)calloc(2,sizeof(char));
 
   //copying availability commands into buffers
+  fprintf(stdout, "[MAIN] strlen = %d\n", strlen("a\n"));
   strcpy(available,   "a\n");
   strcpy(unavailable, "u\n");
   strcpy(disconnect,  "c\n");
@@ -608,7 +689,7 @@ int main(int argc, char* argv[]){
 
   fprintf(stdout, "[MAIN] initializing semaphores...\n");
 
-  //creating sempahore for listen function in usrl_liste_thread_routine
+  //creating sempahore for listen function in usrl_liste_thread_routine for bind action
   ret = sem_init(&sync_receiver, 0, 0);
   ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_receiver semaphore");
 
@@ -619,6 +700,10 @@ int main(int argc, char* argv[]){
   //creating sempahore for syncronization between connect_routine and listen_routine
   ret = sem_init(&sync_connect_listen, 0, 1);
   ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_connect_listen");
+
+  //creating sempahore for syncronization between chat threads
+  ret = sem_init(&sync_chat, 0, 0);
+  ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_chat");
 
   fprintf(stdout, "[MAIN] semaphores initialized correctly\n");
 
@@ -690,7 +775,15 @@ int main(int argc, char* argv[]){
   //ret = close(usrl_recv_socket);
   //ERROR_HELPER(ret, "Cannot close usrl_recv_socket");
 
+  //socket descriptor for connect thread
+  int connect_socket = socket(AF_INET, SOCK_STREAM, 0);
+  ERROR_HELPER(connect_socket, "[MAIN] Error while creating connect thread socket descriptor");
 
+  //creating parameters for connect thread funtion
+  client_thread_args_t* connect_thread_args = (client_thread_args_t*)malloc(sizeof(client_thread_args_t));
+  connect_thread_args->socket = socket_desc;
+
+  //signal handler !!change it!!
   signal(SIGINT, main_interrupt_handler);
 
   char* buf_commands = (char*)malloc(8*sizeof(char));
@@ -707,17 +800,8 @@ int main(int argc, char* argv[]){
 
     if(strcmp(buf_commands, "connect\n")==0){
 
-
       ret = sem_wait(&sync_connect_listen);
       ERROR_HELPER(ret, "[MAIN] Error in wait function on sync_connect_listen semaphore\n");
-
-      //socket descriptor for connect thread
-      int connect_socket = socket(AF_INET, SOCK_STREAM, 0);
-      ERROR_HELPER(connect_socket, "[MAIN] Error while creating connect thread socket descriptor");
-
-      //creating parameters for connect thread funtion
-      client_thread_args_t* connect_thread_args = (client_thread_args_t*)malloc(sizeof(client_thread_args_t));
-      connect_thread_args->socket = socket_desc;
 
       fprintf(stderr, "[MAIN] Creating connect_thread...\n");
 
