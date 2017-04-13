@@ -25,23 +25,35 @@ GAsyncQueue* mailbox_queue;
 int thread_count;
 
 void get_and_check_username(int socket, char* username){
-  char send_buf[2] = {0};
+  char* send_buf = (char*)calloc(2, sizeof(char));
   while(1){
     int ret = recv_msg(socket, username, USERNAME_BUF_SIZE);
     ERROR_HELPER(ret, "[MAIN]: cannot receive username");
 
-    if(CONTAINS(user_list, username) == TRUE){
-      send_buf[0] = UNAVAILABLE;
-      send_msg(socket, &send_buf);
-      bzero(username, USERNAME_BUF_SIZE);
-      continue;
-    }
-    else{
+    ret = sem_wait(&user_list_mutex);
+    ERROR_HELPER(ret, "[MAIN]:cannot wait on user_list_mutex");
+
+    if(CONTAINS(user_list, username) == FALSE){
+      ret = sem_post(&user_list_mutex);
+      ERROR_HELPER(ret, "[MAIN]:cannot post on user_list_mutex");
+
       send_buf[0] = AVAILABLE;
-      send_msg(socket, &send_buf);
+      send_buf[1] = '\n';
+      send_msg(socket, send_buf);
       break;
     }
+    else{
+      ret = sem_post(&user_list_mutex);
+      ERROR_HELPER(ret, "[MAIN]:cannot post on user_list_mutex");
+
+      send_buf[0] = UNAVAILABLE;
+      send_msg(socket, send_buf);
+      bzero(username, USERNAME_BUF_SIZE);
+      bzero(send_buf, 2);
+      continue;
+    }
   }
+  fprintf(stdout, "[MAIN]: username getted\n");
   return;
 }
 
@@ -231,7 +243,7 @@ void* connection_handler(void* arg){
   ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
 
   //unlock sender thread
-  fprintf(stdout, "%s\n", args->client_user_name);
+  fprintf(stdout, "[CONNECTION THREAD]: %s\n", args->client_user_name);
   ret = sem_post(args->chandler_sender_sync);
   ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot post on chandler_sender_sync");
 
