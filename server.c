@@ -24,6 +24,27 @@ GHashTable* user_list;
 GAsyncQueue* mailbox_queue;
 int thread_count;
 
+void get_and_check_username(int socket, char* username){
+  char send_buf[2] = {0};
+  while(1){
+    int ret = recv_msg(socket, username, USERNAME_BUF_SIZE);
+    ERROR_HELPER(ret, "[MAIN]: cannot receive username");
+
+    if(CONTAINS(user_list, username) == TRUE){
+      send_buf[0] = UNAVAILABLE;
+      send_msg(socket, &send_buf);
+      bzero(username, USERNAME_BUF_SIZE);
+      continue;
+    }
+    else{
+      send_buf[0] = AVAILABLE;
+      send_msg(socket, &send_buf);
+      break;
+    }
+  }
+  return;
+}
+
 void update_availability(usr_list_elem_t* elem_to_update, char* buf_command){
   //updating user_list
   fprintf(stdout, "SONO QUI\n" );
@@ -139,7 +160,6 @@ void extract_username_from_message(char* message, char* username){
 //transform a usr_list_elem_t in a string according to mod_command
 void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command){
   fprintf(stdout, "[SERIALIZE]: sono dentro la funzione di serializzazione\n");
-  //*buf_out = "";
   buf_out[0] = mod_command;
   strcat(buf_out, "-");
   strcat(buf_out, buf_username);
@@ -299,6 +319,7 @@ void* sender_routine(void* arg){
     //sending message to client's receiver thread
     send_msg(socket_desc, send_buf);
     fprintf(stdout, "[SENDER THREAD]: message sended to client's reciever thread\n");
+    bzero(send_buf, USERLIST_BUFF_SIZE);
   }
   //CLOSE OPERATIONS TO BE HANDLED BY SIGNAL handler
   UNREF(mailbox_queue);
@@ -404,8 +425,7 @@ int main(int argc, char const *argv[]) {
 
       //receiving username
       char* buf = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
-      ret = recv_msg(client_desc , buf, USERNAME_BUF_SIZE);
-      ERROR_HELPER(ret, "client closed the socket");
+      get_and_check_username(client_desc, buf);
 
       //print test
       fprintf(stdout, "[MAIN]: username: %s\n",buf);
