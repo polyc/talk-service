@@ -160,15 +160,17 @@ void* connect_routine(void* args){
 
   client_thread_args_t* arg = (client_thread_args_t*)args;
 
+  //if no users connected exit connect_routine
+  if(g_hash_table_size(user_list) == 0){
+
+    fprintf(stdout, "[CONNECT_ROUTINE] No user to connect to...Sorry\n");
+
+    pthread_exit(NULL);
+  }
+
   //sending availability to server
   send_msg(arg->socket, unavailable);
   fprintf(stdout, "[CONNECT_ROUTINE] unavailable:  %s\n", unavailable);
-
-  //if no users connected exit connect_routine
-  if(g_hash_table_size(user_list) == 0){
-    fprintf(stdout, "[CONNECT_ROUTINE] No user to connect to...Sorry\n");
-    pthread_exit(NULL);
-  }
 
   //mutual exlusion on user_list hashtable
   ret = sem_wait(&sync_userList);
@@ -290,12 +292,11 @@ int get_username(char* username, int socket){
   int i, ret;
 
   fprintf(stdout, "[GET_USERNAME] Enter username: ");
-  fflush(stdout);
+
   username = fgets(username, USERNAME_BUF_SIZE, stdin);
-  //fflush(stdin);
 
   //checking if username has atleast 1 character
-  if(strlen(username)==0){
+  if(strlen(username)==1){ //because there is a \n got from fgets
     fprintf(stdout, "[GET_USERNAME] No username input\n");
     fflush(stdout);
     return 0;
@@ -318,12 +319,12 @@ int get_username(char* username, int socket){
   //sending username to server
   send_msg(socket, buf);
 
-  fprintf(stdout, "[GET_USERNAME] sent username to server\n");
+  fprintf(stdout, "[GET_USERNAME] sent username [%s] to server\n", buf);
 
   //checking if username already in use
   bzero(buf, USERNAME_BUF_SIZE);
 
-  ret = recv_msg(socket, buf, 1);
+  ret = recv_msg(socket, buf, 2);
   ERROR_HELPER(ret, "[GET_USERNAME] Error receiving username check from server");
 
   fprintf(stdout, "[GET_USERNAME] Username available? [%c]\n", buf[0]);
@@ -794,7 +795,9 @@ int main(int argc, char* argv[]){
     strcpy(USERNAME, "");
   }
 
-  fprintf(stdout, "[MAIN] got username\n");
+  strtok(USERNAME, "\n");
+
+  fprintf(stdout, "[MAIN] got username: [%s]\n", USERNAME);
 
   //socket descriptor for connect thread
   int connect_socket = socket(AF_INET, SOCK_STREAM, 0);
