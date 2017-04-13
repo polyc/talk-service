@@ -286,8 +286,8 @@ void* connect_routine(void* args){
 
 }
 
-int get_username(char* username){
-  int i;
+int get_username(char* username, int socket){
+  int i, ret;
 
   fprintf(stdout, "[GET_USERNAME] Enter username: ");
   fflush(stdout);
@@ -309,8 +309,30 @@ int get_username(char* username){
       return 0; //contains '-' character, username not ok return 0
     }
   }
-  //strcat(username, "\n");
 
+  //sending buffer init data for user list
+  //creating buffer for username and availability flag
+  char* buf = (char*)calloc(USERNAME_BUF_SIZE,sizeof(char));
+  strncpy(buf, username, strlen(username));
+
+  //sending username to server
+  send_msg(socket, buf);
+
+  fprintf(stdout, "[GET_USERNAME] sent username to server\n");
+
+  //checking if username already in use
+  bzero(buf, USERNAME_BUF_SIZE);
+
+  ret = recv_msg(socket, buf, 1);
+  ERROR_HELPER(ret, "[GET_USERNAME] Error receiving username check from server");
+
+  fprintf(stdout, "[GET_USERNAME] Username available? [%c]\n", buf[0]);
+
+  if(buf[0] == UNAVAILABLE){
+    free(buf);
+    return 0;
+  }
+  free(buf);
   return 1; //usrname ok
 }
 
@@ -425,7 +447,7 @@ void* read_updates(void* args){
 
     while(1){
 
-      elem_buf = (char*)g_async_queue_try_pop(buf);
+      elem_buf = (char*)POP(buf, POP_TIMEOUT);
 
       if(elem_buf != NULL){
         break;
@@ -684,21 +706,6 @@ int main(int argc, char* argv[]){
 
   fprintf(stdout, "[MAIN][BUFF_TEST] %c, %c, %s", available[0], unavailable[0], disconnect);
 
-  //initializing username buffer
-  USERNAME = (char*)malloc(USERNAME_BUF_SIZE*sizeof(char));
-
-  //getting username from user   add max number of attempts
-  while(1){
-    ret = get_username(USERNAME);
-    if(ret==1){
-      break;
-    }
-    bzero(USERNAME, USERNAME_BUF_SIZE); //setting buffer to 0
-    strcpy(USERNAME, "");
-  }
-
-  fprintf(stdout, "[MAIN] got username\n");
-
   fprintf(stdout, "[MAIN] initializing semaphores...\n");
 
   //creating sempahore for listen function in usrl_liste_thread_routine for bind action
@@ -774,18 +781,20 @@ int main(int argc, char* argv[]){
 
   fprintf(stdout, "[MAIN] connected to server\n");
 
-  //sending buffer init data for user list
-  //creating buffer for username and availability flag
-  char* username_buf_server = (char*)malloc(USERNAME_BUF_SIZE*sizeof(char));
-  strncpy(username_buf_server, USERNAME, strlen(USERNAME));
+  //initializing username buffer
+  USERNAME = (char*)malloc(USERNAME_BUF_SIZE*sizeof(char));
 
-  //sending username to server
-  send_msg(socket_desc, username_buf_server);
+  //getting username from user   add max number of attempts
+  while(1){
+    ret = get_username(USERNAME, socket_desc);
+    if(ret==1){
+      break;
+    }
+    bzero(USERNAME, USERNAME_BUF_SIZE); //setting buffer to 0
+    strcpy(USERNAME, "");
+  }
 
-  fprintf(stdout, "[MAIN] sent username to server\n");
-
-  //ret = close(usrl_recv_socket);
-  //ERROR_HELPER(ret, "Cannot close usrl_recv_socket");
+  fprintf(stdout, "[MAIN] got username\n");
 
   //socket descriptor for connect thread
   int connect_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -848,10 +857,12 @@ int main(int argc, char* argv[]){
   ret = sem_destroy(&sync_connect_listen);
   ERROR_HELPER(ret, "[MAIN] Error destroying &sync_connect_listen semaphore");
 
+  ret = sem_destroy(&sync_chat);
+  ERROR_HELPER(ret, "[MAIN] Error destroying &sync_chat semaphore");
+
   fprintf(stdout, "[MAIN] freeing allocated data...\n");
 
   free(USERNAME);
-  free(username_buf_server);
   free(buf_commands);
 
   fprintf(stdout, "[MAIN] closing socket descriptors...\n");
