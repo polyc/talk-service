@@ -12,6 +12,7 @@ typedef struct thread_args_s{
 typedef struct sender_thread_args_s{
   sem_t* chandler_sender_sync;//sync between chandlers and senders
   char* client_ip;
+  GAsyncQueue* mailbox;//mailbox for message received from chandlers
 }sender_thread_args_t;
 
 //void create_user_list_element(usr_list_elem_t* element, char* ip, thread_args_t* args, char* buf);
@@ -26,5 +27,5 @@ void execute_command(thread_args_t* args, char* availability_buf, usr_list_elem_
 void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_data);
 void update_availability(usr_list_elem_t* element_to_update, char* buf_command);
 void remove_entry(char* username);
-void push_entry(char*parsed_message);
+void push_entry(gpointer key, gpointer value, gpointer user_data/*parsed message*/);
 void pop_entry();
