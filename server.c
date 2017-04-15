@@ -50,7 +50,6 @@ void get_and_check_username(int socket, char* username){
       send_msg(socket, send_buf);
       bzero(username, USERNAME_BUF_SIZE);
       bzero(send_buf, 2);
-      continue;
     }
   }
   fprintf(stdout, "[MAIN]: username getted\n");
@@ -71,13 +70,13 @@ void update_availability(usr_list_elem_t* elem_to_update, char* buf_command){
   return;
 }
 
-void remove_entry(char* elem_to_remove){//to befinished
+void remove_entry(char* elem_to_remove, char* mailbox_to_remove){//to befinished
   gint ret = REMOVE(user_list, elem_to_remove); //remove entry
   if(ret == FALSE){
     ERROR_HELPER(-1, "[CONNECTION THREAD][REMOVING ENTRY]: remove entry failed");
   }
 
-  ret = REMOVE(mailbox_list, elem_to_remove);
+  ret = REMOVE(mailbox_list, mailbox_to_remove);
   if(ret == FALSE){
     ERROR_HELPER(-1, "[CONNECTION THREAD][REMOVING ENTRY]: remove hoihoh entry failed");
   }
@@ -151,9 +150,7 @@ void execute_command(thread_args_t* args, char* availability_buf, usr_list_elem_
 
     case DISCONNECT:
       mod_command = DELETE;
-      fprintf(stdout, "************%s\n", args->client_user_name);
-      remove_entry(args->client_user_name);
-      fprintf(stdout, "!************%s\n", args->client_user_name);
+      remove_entry(args->client_user_name, args->mailbox_key);
       //pushing updates to mailboxes
       FOR_EACH(mailbox_list, (GHFunc)push_entry, build_mailbox_message(args->client_user_name, &mod_command));
       fprintf(stdout, "[CONNECTION THREAD]: disconnect command processed\n");
@@ -437,6 +434,11 @@ int main(int argc, char const *argv[]) {
       //init mailbox for sender thread and chandlers
       GAsyncQueue* mailbox_queue = mailbox_queue_init();
 
+      //receiving username
+      char* username_receiver_buf = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
+      get_and_check_username(client_desc, username_receiver_buf);
+
+
       //thread spawning
       //*********************
       //client handler thread
@@ -450,7 +452,10 @@ int main(int argc, char const *argv[]) {
       thread_args->client_user_name     = client_user_name;
       thread_args->client_ip            = client_ip;
       thread_args->chandler_sender_sync = chandler_sender_sync;
+      thread_args->mailbox_key          = username_receiver_buf;
 
+      //inserting  mailbox_queue in mailbox hash table for usage by chandlers notifying system
+      INSERT(mailbox_list, (gpointer)username_receiver_buf, (gpointer)mailbox_queue);
 
       //sender thread args
       //arguments allocation
@@ -463,21 +468,12 @@ int main(int argc, char const *argv[]) {
 
       fprintf(stderr, "[MAIN]: preparati argomenti per il sender thread\n");
 
-      //receiving username
-      char* buf = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
-      get_and_check_username(client_desc, buf);
-
-      fprintf(stdout, "AAAAAAAAAAAAAAAAAA%s", buf);
-
-      //inserting  mailbox_queue in mailbox hash table for usage by chandlers notifying system
-      INSERT(mailbox_list, (gpointer)buf/*username key*/, (gpointer)mailbox_queue);
-
       //print test
-      fprintf(stdout, "[MAIN]: username: %s\n",buf);
+      fprintf(stdout, "[MAIN]: username: %s\n",username_receiver_buf);
 
       fprintf(stderr, "[MAIN]: ricezione username completata con successo\n");
       //copying username into struct
-      memcpy(thread_args->client_user_name, buf, strlen(buf));
+      memcpy(thread_args->client_user_name, username_receiver_buf, strlen(username_receiver_buf));
 
       //connection handler thread spawning
       pthread_t thread_client;

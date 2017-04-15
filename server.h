@@ -7,6 +7,7 @@ typedef struct thread_args_s{
   char* client_ip;
   char* client_user_name; //key for both hash table
   sem_t* chandler_sender_sync;
+  char* mailbox_key;
 } thread_args_t;
 
 typedef struct sender_thread_args_s{
@@ -26,6 +27,6 @@ void extract_username_from_message(char* message, char* username);
 void execute_command(thread_args_t* args, char* availability_buf, usr_list_elem_t* element_to_update);
 void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_data);
 void update_availability(usr_list_elem_t* element_to_update, char* buf_command);
-void remove_entry(char* elem_to_remove);
+void remove_entry(char* elem_to_remove, char* mailbox_to_remove);
 void push_entry(gpointer key, gpointer value, gpointer user_data/*parsed message*/);
 void pop_entry();
