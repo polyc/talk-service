@@ -163,16 +163,15 @@ void execute_command(thread_args_t* args, char* availability_buf, usr_list_elem_
   return;
 }
 
-char* build_mailbox_message(char* username, char* mod_command) {
-  char* ret = (char*)calloc(MESSAGE_SIZE, sizeof(char));
-  ret[0] = *mod_command;
-  strcat(ret, "-");
-  strcat(ret, username);
-  strcat(ret ,"-\n");
+mailbox_message_t* build_mailbox_message(char* username, char* mod_command) {
+  mailbox_message_t* ret = (mailbox_message_t*)calloc(1, sizeof(mailbox_message_t));
+  ret->mod_command = (char*)calloc(1, sizeof(char));
+  *(ret->mod_command) = *mod_command;
+  ret->client_user_name = username; //copying key address;
   return ret;
 }
 
-void extract_username_from_message(char* message, char* username){
+/*void extract_username_from_message(char* message, char* username){
   fprintf(stdout, "[SENDER THREAD]: extracting username %s\n", message);
   int i;
   for (i = 2; i < USERNAME_BUF_SIZE; i++) {
@@ -182,7 +181,7 @@ void extract_username_from_message(char* message, char* username){
   }
   strncpy(username, message + 2, i-2);
   return;
-}
+}*/
 
 //transform a usr_list_elem_t in a string according to mod_command
 void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command){
@@ -319,18 +318,16 @@ void* sender_routine(void* arg){
   //buffer to be sent
   char* send_buf = (char*)calloc(USERLIST_BUFF_SIZE, sizeof(char));
   //aux command buffer
-  char* buf_command = (char*)malloc(sizeof(char));
-  //aux username buffer
-  char* username = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
+  char buf_command;
+  //aux username pointer to key of userlist hash table
+  char* username;
 
   while(1){
-    char* message = POP(my_mailbox, (guint64)POP_TIMEOUT);
+    mailbox_message_t* message = POP(my_mailbox, (guint64)POP_TIMEOUT);
     if(message == NULL)continue;
     //extract command from message
-    buf_command[0] = message[0];
-    //extract username from message
-    extract_username_from_message(message, username);
-    free(message);
+    buf_command = *(message->mod_command);
+    username = message->client_user_name;
 
     //using username to retrieve changes from userlist
     ret = sem_wait(&user_list_mutex);//wait for other threads
@@ -338,11 +335,15 @@ void* sender_routine(void* arg){
     usr_list_elem_t* element_to_serialize = (usr_list_elem_t*)LOOKUP(user_list, username);
 
     //serializing message
-    serialize_user_element(send_buf, element_to_serialize, username, buf_command[0]);
+    serialize_user_element(send_buf, element_to_serialize, username, buf_command);
     fprintf(stdout, "[SENDER THREAD]: message serialized = %s\n", send_buf);
 
     ret = sem_post(&user_list_mutex);//unlock semaphore
     ERROR_HELPER(ret, "[SENDER THREAD]: cannot post on user_list_mutex semaphore");
+
+    free(message->mod_command);
+    //not freeing client username becuause is freed in free_user_list_element_key
+    free(message);
 
     //sending message to client's receiver thread
     send_msg(socket_desc, send_buf);
@@ -352,7 +353,6 @@ void* sender_routine(void* arg){
   //CLOSE OPERATIONS TO BE HANDLED BY SIGNAL handler
   UNREF(args->mailbox);
   free(send_buf);
-  free(buf_command);
   free(username);
 
   ret = close(socket_desc);

@@ -1,7 +1,7 @@
 #ifndef __COMMON_H__
 #define __COMMON_H__
 
-#define SERVER_IP "127.0.0.1"
+#define SERVER_IP "192.168.1.16"
 #define SERVER_PORT 2015
 #define CLIENT_THREAD_LISTEN_PORT 1025
 #define CLIENT_THREAD_RECEIVER_PORT 1026
@@ -48,6 +48,11 @@ typedef struct usr_list_elem_s{
   char* client_ip;
   char a_flag;
 }usr_list_elem_t;
+
+typedef struct mailbox_message_s{
+  char* client_user_name; //key for userlist hash table
+  char* mod_command;
+}mailbox_message_t;
 
 
 #endif

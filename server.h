@@ -5,9 +5,9 @@
 typedef struct thread_args_s{
   int socket;
   char* client_ip;
-  char* client_user_name; //key for both hash table
+  char* client_user_name; //key for userlist hash table
   sem_t* chandler_sender_sync;
-  char* mailbox_key;
+  char* mailbox_key;//key for mailbox hash table
 } thread_args_t;
 
 typedef struct sender_thread_args_s{
@@ -21,7 +21,7 @@ typedef struct sender_thread_args_s{
 void* connection_handler(void* arg);
 void* sender_routine(void* arg);
 void get_and_check_username(int socket, char* username);
-char* build_mailbox_message(char* username, char* mod_command);
+mailbox_message_t* build_mailbox_message(char* username, char* mod_command);
 void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command);
 void extract_username_from_message(char* message, char* username);
 void execute_command(thread_args_t* args, char* availability_buf, usr_list_elem_t* element_to_update);
