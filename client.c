@@ -837,8 +837,6 @@ int main(int argc, char* argv[]){
 
   while(keepRunning){
 
-    //if(sem_sync_connect_listen < 0){continue;}
-
     bzero(buf_commands, 8);
     fprintf(stdout, "[MAIN] exit/connect: ");
     fgets(buf_commands, 8, stdin);
