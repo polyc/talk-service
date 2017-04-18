@@ -710,6 +710,7 @@ int chat_session(char* username, int socket){
 
   free(args);
 
+  return 0;
 }
 
 int main(int argc, char* argv[]){
@@ -728,7 +729,7 @@ int main(int argc, char* argv[]){
   disconnect  = (char*)calloc(2,sizeof(char));
 
   //copying availability commands into buffers
-  fprintf(stdout, "[MAIN] strlen = %d\n", strlen("a\n"));
+  fprintf(stdout, "[MAIN] strlen = %lu\n", strlen("a\n"));
   strcpy(available,   "a\n");
   strcpy(unavailable, "u\n");
   strcpy(disconnect,  "c\n");
