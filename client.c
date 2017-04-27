@@ -637,7 +637,7 @@ void* recv_routine(void* args){
 
       break;
     }
-
+    strtok(buf, "\n");
     fprintf(stdout, "\n[%s] %s\n", arg->username, buf);
 
   }
@@ -777,22 +777,6 @@ int main(int argc, char* argv[]){
 
   fprintf(stdout, "[MAIN] created data structure for connection with server\n");
 
-  //thread listen
-  //
-  //creating parameters for listen thread
-  client_thread_args_t* listen_thread_args = (client_thread_args_t*)malloc(sizeof(client_thread_args_t));
-  listen_thread_args->socket = socket_desc;
-
-  //creating and spawning thread listen with parameters
-  pthread_t thread_listen;
-  ret = pthread_create(&thread_listen, NULL, listen_routine, (void*)listen_thread_args);
-  PTHREAD_ERROR_HELPER(ret, "[MAIN] Unable to create listen_thread");
-
-  //detatching from listen_thread
-  ret = pthread_detach(thread_listen);                                          //cancell because main process will join on this thread
-  PTHREAD_ERROR_HELPER(ret, "[MAIN] Unable to detatch from listen_thread");     //when handling SIGINT
-  //
-  //detached from thread listen
 
 
   //user list receiver thread
@@ -844,6 +828,11 @@ int main(int argc, char* argv[]){
   char* buf_commands = (char*)malloc(8*sizeof(char));
 
   pthread_t connect_thread;
+  pthread_t thread_listen;
+
+  //creating parameters for listen thread
+  client_thread_args_t* listen_thread_args = (client_thread_args_t*)malloc(sizeof(client_thread_args_t));
+  listen_thread_args->socket = socket_desc;
 
   while(keepRunning){
 
@@ -855,6 +844,17 @@ int main(int argc, char* argv[]){
 
     if(list_command(buf_commands)==1){
       continue;
+    }
+
+    if(strcmp(buf_commands, "listen")==0){
+
+      //creating and spawning thread listen with parameters
+      ret = pthread_create(&thread_listen, NULL, listen_routine, (void*)listen_thread_args);
+      PTHREAD_ERROR_HELPER(ret, "[MAIN] Unable to create listen_thread");
+
+      ret = pthread_join(thread_listen, NULL);
+      PTHREAD_ERROR_HELPER(ret, "[MAIN] Unable to join listen thread");
+
     }
 
     if(strcmp(buf_commands, "connect")==0){
