@@ -121,6 +121,7 @@ void* listen_routine(void* args){
     //sending unavailability to server
     send_msg(arg->socket, unavailable);
 
+    /*
     ret = sem_wait(&sync_connect_listen);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in wait function on sync_connect_listen semaphore\n");
 
@@ -146,6 +147,7 @@ void* listen_routine(void* args){
     }
 
     free(buf_answer);
+    */
 
     fprintf(stdout, "[LISTEN_ROUTINE] incoming connection accepted...waiting for username\n");
 
@@ -515,7 +517,7 @@ void* usr_list_recv_thread_routine(void* args){
 
   //socket descriptor for user list receiver thread
   int usrl_recv_socket = socket(AF_INET, SOCK_STREAM, 0);
-  ERROR_HELPER(usrl_recv_socket, "[MAIN] Error while creating user list receiver thread socket descriptor");
+  ERROR_HELPER(usrl_recv_socket, "[RECV_THREAD_ROUTINE] Error while creating user list receiver thread socket descriptor");
 
   //creating buffers to store modifications sent by server
   GAsyncQueue* buf_modifications = g_async_queue_new();
@@ -578,8 +580,6 @@ void* usr_list_recv_thread_routine(void* args){
         continue;
       }
 
-      fprintf(stderr, "[RECV_THREAD_ROUTINE] accepted connection from server\n");
-
       char* queueBuf_elem = (char*)malloc(strlen(buf)*sizeof(char));
 
       memcpy(queueBuf_elem, buf, strlen(buf));
@@ -615,6 +615,8 @@ void* usr_list_recv_thread_routine(void* args){
 
 void* recv_routine(void* args){
 
+  fprintf(stdout, "[RECV_ROUTINE] inside recv_routine\n");
+
   int ret;
 
   chat_session_args_t* arg = (chat_session_args_t*)args;
@@ -646,6 +648,8 @@ void* recv_routine(void* args){
 }
 
 void* send_routine(void* args){
+
+  fprintf(stdout, "[SEND_ROUTINE] inside send_routine\n");
 
   int ret;
 
@@ -703,6 +707,8 @@ int chat_session(char* username, int socket){
   //creating thread chat_send
   ret = pthread_create(&chat_send, NULL, send_routine, (void*)args);
   PTHREAD_ERROR_HELPER(ret, "[CHAT_SESSION] Unable to create chat_send thread");
+
+  fprintf(stdout, "[CHAT_SESSION] created recv_thread and sed_thread");
 
   //mutual exlusion on chat
   ret = sem_wait(&sync_chat);
