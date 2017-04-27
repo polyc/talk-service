@@ -121,10 +121,10 @@ void* listen_routine(void* args){
     //sending unavailability to server
     send_msg(arg->socket, unavailable);
 
-    /*
     ret = sem_wait(&sync_connect_listen);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in wait function on sync_connect_listen semaphore\n");
 
+    /*
     char* buf_answer = (char*)malloc(sizeof(char));
 
     fprintf(stdout, "[LISTEN_ROUTINE] Accept incoming connection?[Y,N]: \n");
@@ -290,7 +290,9 @@ void* connect_routine(void* args){
   ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error trying to connect to target");
 
   //sending username to receiver client so he knows who it is
+  strcat(USERNAME, "\n");
   send_msg(connect_socket, USERNAME);
+  strtok(USERNAME, "\n");
 
   fprintf(stdout, "[CONNECT_ROUTINE] Connected to %s passing arguments to chat_session\n", target);
 
@@ -666,12 +668,13 @@ void* send_routine(void* args){
 
     if(strcmp(buf, "exit")==0){
       //do something
-
+      strcat(buf, "\n");
       //sending exit message
       send_msg(arg->socket, buf);
       break;
     }
 
+    strcat(buf, "\n");
     send_msg(arg->socket, buf);
 
   }
