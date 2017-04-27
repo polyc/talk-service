@@ -109,20 +109,20 @@ void* listen_routine(void* args){
     struct sockaddr_in* client_address = (struct sockaddr_in*)calloc(1, sizeof(struct sockaddr_in));
     socklen_t client_address_len = sizeof(client_address);
 
-    sem_getvalue(&sync_connect_listen, &sem_value);
+    /*sem_getvalue(&sync_connect_listen, &sem_value);
 
     if(sem_value < 1){
       continue;
-    }
+
+    }*/
+    ret = sem_wait(&sync_connect_listen);
+    ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in wait function on sync_connect_listen semaphore\n");
 
     int client_socket = accept(thread_socket, (struct sockaddr*) &client_address, &client_address_len);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Cannot accept connection on user list receiver thread socket");
 
     //sending unavailability to server
     send_msg(arg->socket, unavailable);
-
-    ret = sem_wait(&sync_connect_listen);
-    ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in wait function on sync_connect_listen semaphore\n");
 
     /*
     char* buf_answer = (char*)malloc(sizeof(char));
