@@ -202,7 +202,7 @@ void* connect_routine(void* args){
 
     fgets(target, USERNAME_BUF_SIZE, stdin);
 
-    target = strtok(target, "\n");
+    strtok(target, "\n");
 
     char* username_cpy = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
     strncpy(username_cpy, USERNAME, USERNAME_BUF_SIZE);
@@ -617,6 +617,10 @@ void* recv_routine(void* args){
 
     if(strcmp(buf, "exit")==0 || ret == -1){
       //do something (Ex. sem_post on a semaphore)
+      pthread_kill(*(arg->thread_id), SIGKILL);
+
+      ret = sem_post(&sync_chat);
+      ERROR_HELPER(ret, "[RECV_ROUTINE] Error in post function on sync_userList semaphore");
 
       break;
     }
@@ -655,7 +659,10 @@ void* send_routine(void* args){
       //sending exit message
       send_msg(arg->socket, buf);
 
-      pthread_kill(arg->thread_id, SIGINT);
+      pthread_kill(*(arg->thread_id), SIGKILL);
+
+      ret = sem_post(&sync_chat);
+      ERROR_HELPER(ret, "[SEND_ROUTINE] Error in post function on sync_userList semaphore\n");
 
       break;
     }
@@ -685,17 +692,22 @@ int chat_session(char* username, int socket){
   pthread_t chat_send;
 
   //initiate arguments for both threads chat_recv and chat_send
-  chat_session_args_t* args = (chat_session_args_t*)malloc(sizeof(chat_session_args_t));
-  args->socket   = socket;
-  args->username = username;
-  args->thread_id = chat_recv;
+  chat_session_args_t* args_recv = (chat_session_args_t*)malloc(sizeof(chat_session_args_t));
+  args_recv->socket   = socket;
+  args_recv->username = username;
+  args_recv->thread_id = &chat_send;
+
+  chat_session_args_t* args_send = (chat_session_args_t*)malloc(sizeof(chat_session_args_t));
+  args_send->socket   = socket;
+  args_send->username = username;
+  args_send->thread_id = &chat_recv;
 
   //creating thread chat_recv
-  ret = pthread_create(&chat_recv, NULL, recv_routine, (void*)args);
+  ret = pthread_create(&chat_recv, NULL, recv_routine, (void*)args_recv);
   PTHREAD_ERROR_HELPER(ret, "[CHAT_SESSION] Unable to create chat_recv thread");
 
   //creating thread chat_send
-  ret = pthread_create(&chat_send, NULL, send_routine, (void*)args);
+  ret = pthread_create(&chat_send, NULL, send_routine, (void*)args_send);
   PTHREAD_ERROR_HELPER(ret, "[CHAT_SESSION] Unable to create chat_send thread");
 
   fprintf(stdout, "[CHAT_SESSION] created recv_thread and sed_thread\n");
@@ -707,7 +719,8 @@ int chat_session(char* username, int socket){
   ret = sem_wait(&sync_chat);
   ERROR_HELPER(ret, "[CHAT_SESSION] Error in wait function on sync_chat semaphore");
 
-  free(args);
+  free(args_send);
+  free(args_recv);
 
   return 0;
 }
@@ -829,7 +842,7 @@ int main(int argc, char* argv[]){
   while(keepRunning){
 
     bzero(buf_commands, 8);
-    fprintf(stdout, "[MAIN] exit/connect: ");
+    fprintf(stdout, "[MAIN] exit/connect/listen: ");
     fgets(buf_commands, 8, stdin);
 
     buf_commands = strtok(buf_commands, "\n");
