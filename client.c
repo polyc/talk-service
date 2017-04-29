@@ -142,8 +142,10 @@ void* listen_routine(void* args){
       //sending availability to server
       send_msg(arg->socket, available);
 
+      /*
       ret = sem_post(&sync_connect_listen);
       ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
+      */
 
       free(buf_answer);
       free(client_address);
