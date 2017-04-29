@@ -716,9 +716,6 @@ int chat_session(char* username, int socket){
   ret = sem_wait(&sync_chat);
   ERROR_HELPER(ret, "[CHAT_SESSION] Error in wait function on sync_chat semaphore");
 
-  ret = sem_wait(&sync_chat);
-  ERROR_HELPER(ret, "[CHAT_SESSION] Error in wait function on sync_chat semaphore");
-
   free(args_send);
   free(args_recv);
 
