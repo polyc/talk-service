@@ -7,6 +7,7 @@ typedef struct client_thread_args_s{
 typedef struct chat_session_args_s{
   int socket;
   char* username;
+  pthread_t* thread_id;
 }chat_session_args_t;
 
 #define MSG_LEN 256
