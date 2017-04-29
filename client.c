@@ -38,6 +38,10 @@ static void print_userList(gpointer key, gpointer elem, gpointer data){
 
   char* username = (char*)key;
 
+  if(strcmp(username, USERNAME)==0){
+    return;
+  }
+
   usr_list_elem_t* usr_elem = (usr_list_elem_t*)elem;
 
   fprintf(stdout, "\n[PRINT_USERLIST]###############################################\n");
@@ -608,6 +612,9 @@ void* recv_routine(void* args){
 
   char* buf = (char*)calloc(MSG_LEN, sizeof(char));
 
+  char* exit_buf = (char*)malloc(strlen("exit")*sizeof(char));
+  strcpy(exit_buf, "exit");
+
   while(1){
     bzero(buf, MSG_LEN);
 
@@ -615,12 +622,13 @@ void* recv_routine(void* args){
     ret = recv_msg(arg->socket, buf, MSG_LEN);
     //ERROR_HELPER(ret, "[RECV_ROUTINE] Error in recv_msg");
 
-    if(strcmp(buf, "exit")==0 || ret == -1){
+    if(strcmp(buf, exit_buf)==0 || ret == -1){
       //do something (Ex. sem_post on a semaphore)
-      pthread_kill(*(arg->thread_id), SIGKILL);
+      fprintf(stdout, "[RECV_ROUTINE]Received exit msg\n");
 
-      ret = sem_post(&sync_chat);
-      ERROR_HELPER(ret, "[RECV_ROUTINE] Error in post function on sync_userList semaphore");
+      pthread_kill(*(arg->thread_id), SIGINT);
+
+      fprintf(stdout, "[RECV_ROUTINE] Sent kill signal\n");
 
       break;
     }
@@ -634,11 +642,16 @@ void* recv_routine(void* args){
   ret = sem_post(&sync_chat);
   ERROR_HELPER(ret, "[RECV_ROUTINE] Error in post function on sync_userList semaphore");
 
+  fprintf(stdout, "[RECV_ROUTINE] Exiting recv_routine\n");
+
 }
 
 void* send_routine(void* args){
 
   fprintf(stdout, "[SEND_ROUTINE] inside send_routine\n");
+
+  char* exit_buf = (char*)malloc(strlen("exit")*sizeof(char));
+  strcpy(exit_buf, "exit");
 
   int ret;
 
@@ -653,16 +666,17 @@ void* send_routine(void* args){
 
     buf = strtok(buf, "\n");
 
-    if(strcmp(buf, "exit")==0){
+    if(strcmp(buf, exit_buf)==0){
       //do something
       buf = strcat(buf, "\n");
       //sending exit message
       send_msg(arg->socket, buf);
 
-      pthread_kill(*(arg->thread_id), SIGKILL);
+      fprintf(stdout, "[SEND_ROUTINE] Sent exit msg\n");
 
-      ret = sem_post(&sync_chat);
-      ERROR_HELPER(ret, "[SEND_ROUTINE] Error in post function on sync_userList semaphore\n");
+      pthread_kill(*(arg->thread_id), SIGINT);
+
+      fprintf(stdout, "[SEND_ROUTINE] Sent kill signal\n");
 
       break;
     }
@@ -676,6 +690,8 @@ void* send_routine(void* args){
 
   ret = sem_post(&sync_chat);
   ERROR_HELPER(ret, "[SEND_ROUTINE] Error in post function on sync_userList semaphore\n");
+
+  fprintf(stdout, "[SEND_ROUTINE] Exiting send_routine\n");
 
 }
 
@@ -715,6 +731,8 @@ int chat_session(char* username, int socket){
   //mutual exlusion on chat
   ret = sem_wait(&sync_chat);
   ERROR_HELPER(ret, "[CHAT_SESSION] Error in wait function on sync_chat semaphore");
+
+  fprintf(stdout, "[CHAT_SESSION] exiting chat_session\n");
 
   free(args_send);
   free(args_recv);
@@ -865,6 +883,7 @@ int main(int argc, char* argv[]){
       send_msg(socket_desc, unavailable);
       fprintf(stdout, "[MAIN] unavailable:  %s\n", unavailable);
 
+      continue;
     }
 
     if(strcmp(buf_commands, "connect")==0){
