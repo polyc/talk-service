@@ -20,7 +20,7 @@
 sem_t sync_receiver;
 sem_t sync_userList;
 sem_t sync_chat;
-sem_t sync_connect_listen;
+//sem_t sync_connect_listen;
 GHashTable* user_list;
 
 char* USERNAME;
@@ -115,16 +115,21 @@ void* listen_routine(void* args){
       continue;
 
     }*/
+
+    /*
     ret = sem_wait(&sync_connect_listen);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in wait function on sync_connect_listen semaphore\n");
+    */
 
     int client_socket = accept(thread_socket, (struct sockaddr*) &client_address, &client_address_len);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Cannot accept connection on user list receiver thread socket");
 
+    /*
     //sending unavailability to server
     send_msg(arg->socket, unavailable);
+    */
 
-    /*
+
     char* buf_answer = (char*)malloc(sizeof(char));
 
     fprintf(stdout, "[LISTEN_ROUTINE] Accept incoming connection?[Y,N]: \n");
@@ -147,7 +152,6 @@ void* listen_routine(void* args){
     }
 
     free(buf_answer);
-    */
 
     fprintf(stdout, "[LISTEN_ROUTINE] incoming connection accepted...waiting for username\n");
 
@@ -166,11 +170,13 @@ void* listen_routine(void* args){
     free(client_username);
     free(client_address);
 
+    /*
     //sending availability to server
     send_msg(arg->socket, available);
 
     ret = sem_post(&sync_connect_listen);
     ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
+    */
 
   }
 
@@ -196,9 +202,11 @@ void* connect_routine(void* args){
     pthread_exit(NULL);
   }
 
+  /*
   //sending availability to server
   send_msg(arg->socket, unavailable);
   fprintf(stdout, "[CONNECT_ROUTINE] unavailable:  %s\n", unavailable);
+  */
 
   //mutual exlusion on user_list hashtable
   ret = sem_wait(&sync_userList);
@@ -247,11 +255,13 @@ void* connect_routine(void* args){
 
       fprintf(stdout, "[CONNECT_ROUTINE] exiting connect routine\n");
 
+      /*
       //sending availability to server
       send_msg(arg->socket, available);
 
       ret = sem_post(&sync_connect_listen);
       ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
+      */
 
       free(target);
 
@@ -300,11 +310,13 @@ void* connect_routine(void* args){
   ret = chat_session(target, connect_socket);
   //check cheat_session return value
 
+  /*
   //sending availability to server
   send_msg(arg->socket, available);
 
   ret = sem_post(&sync_connect_listen);
   ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
+  */
 
   // close connection to client socket
   ret = close(connect_socket);
@@ -755,9 +767,11 @@ int main(int argc, char* argv[]){
   ret = sem_init(&sync_userList, 0, 1);
   ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_userList semaphore");
 
+  /*
   //creating sempahore for syncronization between connect_routine and listen_routine
   ret = sem_init(&sync_connect_listen, 0, 1);
   ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_connect_listen");
+  */
 
   //creating sempahore for syncronization between chat threads
   ret = sem_init(&sync_chat, 0, 0);
@@ -821,10 +835,6 @@ int main(int argc, char* argv[]){
 
   fprintf(stdout, "[MAIN] got username: [%s]\n", USERNAME);
 
-  //creating parameters for connect thread funtion
-  client_thread_args_t* connect_thread_args = (client_thread_args_t*)malloc(sizeof(client_thread_args_t));
-  connect_thread_args->socket = socket_desc;
-
   char* buf_commands = (char*)malloc(8*sizeof(char));
 
   pthread_t connect_thread;
@@ -833,6 +843,10 @@ int main(int argc, char* argv[]){
   //creating parameters for listen thread
   client_thread_args_t* listen_thread_args = (client_thread_args_t*)malloc(sizeof(client_thread_args_t));
   listen_thread_args->socket = socket_desc;
+
+  //creating parameters for connect thread funtion
+  client_thread_args_t* connect_thread_args = (client_thread_args_t*)malloc(sizeof(client_thread_args_t));
+  connect_thread_args->socket = socket_desc;
 
   while(keepRunning){
 
@@ -848,6 +862,10 @@ int main(int argc, char* argv[]){
 
     if(strcmp(buf_commands, "listen")==0){
 
+      //sending availability to server
+      send_msg(socket_desc, available);
+      fprintf(stdout, "[MAIN] available:  %s\n", available);
+
       //creating and spawning thread listen with parameters
       ret = pthread_create(&thread_listen, NULL, listen_routine, (void*)listen_thread_args);
       PTHREAD_ERROR_HELPER(ret, "[MAIN] Unable to create listen_thread");
@@ -855,14 +873,24 @@ int main(int argc, char* argv[]){
       ret = pthread_join(thread_listen, NULL);
       PTHREAD_ERROR_HELPER(ret, "[MAIN] Unable to join listen thread");
 
+      //sending availability to server
+      send_msg(socket_desc, unavailable);
+      fprintf(stdout, "[MAIN] unavailable:  %s\n", unavailable);
+
     }
 
     if(strcmp(buf_commands, "connect")==0){
 
+      /*
       ret = sem_wait(&sync_connect_listen);
       ERROR_HELPER(ret, "[MAIN] Error in wait function on sync_connect_listen semaphore\n");
+      */
 
       fprintf(stderr, "[MAIN] Creating connect_thread...\n");
+
+      //sending availability to server
+      send_msg(socket_desc, unavailable);
+      fprintf(stdout, "[MAIN] unavailable:  %s\n", unavailable);
 
       pthread_t connect_thread;
       ret = pthread_create(&connect_thread, NULL, connect_routine, (void*)connect_thread_args);
@@ -892,8 +920,10 @@ int main(int argc, char* argv[]){
   ret = sem_destroy(&sync_userList);
   ERROR_HELPER(ret, "[MAIN] Error destroying &sync_userList semaphore");
 
+  /*
   ret = sem_destroy(&sync_connect_listen);
   ERROR_HELPER(ret, "[MAIN] Error destroying &sync_connect_listen semaphore");
+  */
 
   ret = sem_destroy(&sync_chat);
   ERROR_HELPER(ret, "[MAIN] Error destroying &sync_chat semaphore");
