@@ -90,7 +90,9 @@ void push_entry(gpointer key, gpointer value, gpointer user_data/*parsed message
   int ret = sem_wait(&mailbox_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on mailbox_list_mutex");
 
-  g_async_queue_push((GAsyncQueue*)value, user_data);
+  if((strcmp((char*)key, ((mailbox_message_t*)(user_data))->client_user_name)) != 0){
+    PUSH((GAsyncQueue*)value, user_data);
+  }
 
   ret = sem_post(&mailbox_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on mailbox_list_mutex");
@@ -171,53 +173,41 @@ mailbox_message_t* build_mailbox_message(char* username, char* mod_command) {
   return ret;
 }
 
-/*void extract_username_from_message(char* message, char* username){
-  fprintf(stdout, "[SENDER THREAD]: extracting username %s\n", message);
-  int i;
-  for (i = 2; i < USERNAME_BUF_SIZE; i++) {
-    if(message[i] == '-'){
-      break;
-    }
-  }
-  strncpy(username, message + 2, i-2);
-  return;
-}*/
-
 //transform a usr_list_elem_t in a string according to mod_command
 void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command){
   fprintf(stdout, "[SERIALIZE]: sono dentro la funzione di serializzazione\n");
   buf_out[0] = mod_command;
-  strcat(buf_out, "-");
-  strcat(buf_out, buf_username);
+  buf_out = strcat(buf_out, "-");
+  buf_out = strcat(buf_out, buf_username);
   fprintf(stdout, "[SERIALIZE]: maremma maiala\n");
 
 
   if(mod_command == DELETE){
-    strcat(buf_out ,"-\n");
+    buf_out = strcat(buf_out ,"-\n");
     return;
   }
   else if (mod_command == NEW){
-    strcat(buf_out, "-");
-    strcat(buf_out, elem->client_ip);
-    strcat(buf_out, "-");
-    strcat(buf_out, &(elem->a_flag));
-    strcat(buf_out, "-\n");
+    buf_out = strcat(buf_out, "-");
+    buf_out = strcat(buf_out, elem->client_ip);
+    buf_out = strcat(buf_out, "-");
+    buf_out = strcat(buf_out, &(elem->a_flag));
+    buf_out = strcat(buf_out, "-\n");
     return;
   }
 
   else{
-    strcat(buf_out, "-");
-    strcat(buf_out, elem->client_ip);
-    strcat(buf_out, "-");
+    buf_out = strcat(buf_out, "-");
+    buf_out = strcat(buf_out, elem->client_ip);
+    buf_out = strcat(buf_out, "-");
 
     if((elem->a_flag) == AVAILABLE){
-      strcat(buf_out, "a");
-      strcat(buf_out, "-\n");
+      buf_out = strcat(buf_out, "a");
+      buf_out = strcat(buf_out, "-\n");
       return;
     }
     else{
-      strcat(buf_out, "u");
-      strcat(buf_out, "-\n");
+      buf_out = strcat(buf_out, "u");
+      buf_out = strcat(buf_out, "-\n");
       return;
     }
   }
@@ -240,9 +230,7 @@ void* connection_handler(void* arg){
   //filling element struct with client data;
   element->client_ip = (char*)malloc(INET_ADDRSTRLEN*sizeof(char));
   memcpy(element->client_ip, args->client_ip, INET_ADDRSTRLEN);
-  element->a_flag = AVAILABLE;
-
-  fprintf(stdout, "BBBBBBBBBBBBB%s", args->client_user_name);
+  element->a_flag = UNAVAILABLE;
 
   //inserting user into hash-table userlist
   ret = sem_wait(&user_list_mutex);
@@ -257,7 +245,11 @@ void* connection_handler(void* arg){
 
   //pushing updates to mailboxes
   char newComand = NEW;
-  FOR_EACH(mailbox_list, (GHFunc)push_entry, build_mailbox_message(args->client_user_name, &newComand));
+  mailbox_message_t* message =  build_mailbox_message(args->client_user_name, &newComand);
+
+  FOR_EACH(mailbox_list, (GHFunc)push_entry, message);
+
+  free(message);
 
   //unlock sender thread
   fprintf(stdout, "[CONNECTION THREAD]: %s\n", args->client_user_name);
@@ -268,18 +260,12 @@ void* connection_handler(void* arg){
   char* buf_command = (char*)calloc(2,sizeof(char));
 
   while(1){
-    int ret = recv_msg(args->socket, buf_command, 2); //TO BE FIXED
+    int ret = recv_msg(args->socket, buf_command, 2);
     ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot receive server command from client");
 
     execute_command(args, buf_command, element);
   }
 
-  /*CLOSE OPERATIONS (TO BE WRITTEN IN A FUNCTION)
-  ret = close(args->socket);//close client_desc
-  ERROR_HELPER(ret, "Cannot close socket for incoming connection");
-
-  free(args->client_ip); //free of client_ip dotted
-  //free(args);*/
   pthread_exit(NULL);
 }
 
@@ -313,6 +299,8 @@ void* sender_routine(void* arg){
   ERROR_HELPER(ret, "[SENDER THREAD]: cannot wait on chandler_sender_sync semaphore");
   //sending list to client (thread safe)
   FOR_EACH(user_list, (GHFunc)send_list_on_client_connection, &socket_desc);
+
+  fprintf(stderr, "[SENDER THREAD]: sended list on first connection");
 
   //retrieving changes from mailbox and sending to client
   //buffer to be sent
