@@ -20,7 +20,7 @@
 
 sem_t sync_receiver;
 sem_t sync_userList;
-//sem_t sync_connect_listen;
+sem_t sync_chat;
 GHashTable* user_list;
 
 char* USERNAME;
@@ -29,7 +29,7 @@ char* unavailable;
 char* disconnect;
 
 static volatile int keepRunning = 1;
-static volatile int chat_session_running = 1;
+static volatile int chat_session_running;
 
 void main_interrupt_handler(int dummy){
     keepRunning = 0;
@@ -146,17 +146,9 @@ void* listen_routine(void* args){
   ret = chat_session(client_username, client_socket);
 
   close(client_socket);
+  close(thread_socket);
 
   free(client_username);
-    /*
-    //sending availability to server
-    send_msg(arg->socket, available);
-
-    ret = sem_post(&sync_connect_listen);
-    ERROR_HELPER(ret, "[LISTEN_ROUTINE] Error in post function on sync_connect_listen semaphore\n");
-    */
-
-  //rememeber to free stuff
 
 }
 
@@ -630,7 +622,6 @@ void* recv_routine(void* args){
       //do something (Ex. sem_post on a semaphore)
       fprintf(stdout, "[RECV_ROUTINE]Received exit msg\n");
 
-
       break;
     }
     buf = strtok(buf, "\n");
@@ -645,6 +636,10 @@ void* recv_routine(void* args){
   fprintf(stdout, "[EXIT] press any key to exit: ");
 
   chat_session_running = 0;
+
+  //ublocking &sync_chat for chat_session
+  ret = sem_post(&sync_chat);
+  ERROR_HELPER(ret, "[RECV_ROUTINE] Error in sem_post on &sync_chat semaphore");
 
   pthread_exit(NULL);
 }
@@ -674,7 +669,8 @@ void* send_routine(void* args){
     buf = strtok(buf, "\n");
 
     if(!chat_session_running){
-      break;
+      free(buf);
+      pthread_exit(NULL);
     }
 
     if(strcmp(buf, exit_buf)==0){
@@ -697,7 +693,9 @@ void* send_routine(void* args){
 
   fprintf(stdout, "[SEND_ROUTINE] Exiting send_routine\n");
 
-  chat_session_running = 0;
+  //ublocking &sync_chat for chat_session
+  ret = sem_post(&sync_chat);
+  ERROR_HELPER(ret, "[SEND_ROUTINE] Error in sem_post on &sync_chat semaphore");
 
   pthread_exit(NULL);
 
@@ -706,6 +704,8 @@ void* send_routine(void* args){
 int chat_session(char* username, int socket){
 
   int ret;
+
+  chat_session_running = 1;
 
   //display welcome msg
   fprintf(stdout, "[CHAT_SESSION] You are chatting with [%s]\n", username);
@@ -736,7 +736,9 @@ int chat_session(char* username, int socket){
 
   fprintf(stdout, "[CHAT_SESSION] created recv_thread and sed_thread\n");
 
-  while(chat_session_running){}
+  //waiting &sync_chat for main process
+  ret = sem_wait(&sync_chat);
+  ERROR_HELPER(ret, "[CHAT_SESSIONE] Error in sem_wait on &sync_chat semaphore");
 
   fprintf(stdout, "[CHAT_SESSION] exiting chat_session\n");
 
@@ -779,11 +781,9 @@ int main(int argc, char* argv[]){
   ret = sem_init(&sync_userList, 0, 1);
   ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_userList semaphore");
 
-  /*
   //creating sempahore for syncronization between connect_routine and listen_routine
-  ret = sem_init(&sync_connect_listen, 0, 1);
-  ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_connect_listen");
-  */
+  ret = sem_init(&sync_chat, 0, 0);
+  ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_chat");
 
   fprintf(stdout, "[MAIN] semaphores initialized correctly\n");
 
