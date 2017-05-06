@@ -630,6 +630,7 @@ void* recv_routine(void* args){
       //do something (Ex. sem_post on a semaphore)
       fprintf(stdout, "[RECV_ROUTINE]Received exit msg\n");
 
+
       break;
     }
     buf = strtok(buf, "\n");
@@ -640,6 +641,8 @@ void* recv_routine(void* args){
   free(buf);
 
   fprintf(stdout, "[RECV_ROUTINE] Exiting recv_routine\n");
+
+  fprintf(stdout, "[EXIT] press any key to exit: ");
 
   chat_session_running = 0;
 
@@ -663,11 +666,16 @@ void* send_routine(void* args){
   char* buf = (char*)calloc(MSG_LEN, sizeof(char));
 
   while(1){
+
     bzero(buf, MSG_LEN);
 
     fgets(buf, MSG_LEN, stdin);
 
     buf = strtok(buf, "\n");
+
+    if(!chat_session_running){
+      break;
+    }
 
     if(strcmp(buf, exit_buf)==0){
       //do something
@@ -688,6 +696,7 @@ void* send_routine(void* args){
   free(buf);
 
   fprintf(stdout, "[SEND_ROUTINE] Exiting send_routine\n");
+
   chat_session_running = 0;
 
   pthread_exit(NULL);
