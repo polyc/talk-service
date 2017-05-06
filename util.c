@@ -72,7 +72,6 @@ void free_mailbox_list_element_value(gpointer data){
 //free mailbox entry
 void free_mailbox(gpointer data){
   mailbox_message_t* message = (mailbox_message_t*)data;
-  free((char*)message->mod_command);
   //not freeing client username becuause is freed in free_user_list_element_key
   free(message);
   return;
