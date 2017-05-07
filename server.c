@@ -81,7 +81,9 @@ void remove_entry(char* elem_to_remove, char* mailbox_to_remove){//to befinished
 
   ret = sem_wait(&mailbox_list_mutex);
   ERROR_HELPER(ret, "[MAIN]: could not wait on mailbox_list semaphore");
+
   ret = REMOVE(mailbox_list, mailbox_to_remove);
+
   ret = sem_post(&mailbox_list_mutex);
   ERROR_HELPER(ret, "[MAIN]: could not post on mailbox_list semaphore");
 
@@ -112,23 +114,17 @@ void pop_entry(){}
 
 //function called by FOR_EACH. It send single user element to receiver thread in client
 void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_data){
-  int ret = sem_wait(&user_list_mutex);
-  ERROR_HELPER(ret, "[SENDING LIST]: cannot wait on user_list_mutex");
 
-  char* buf = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
+  char* buf = (char*)calloc(USERLIST_BUFF_SIZE, sizeof(char));
 
-  serialize_user_element(buf, value, key, NEW);
-  fprintf(stdout, "[SENDING LIST]: serialized element: %s\n", buf);
+  serialize_user_element(buf, (usr_list_elem_t*)value, (char*)key, NEW);
+  //fprintf(stdout, "[SENDING LIST]: serialized element: %s\n", buf);
 
-  fprintf(stdout, "[SENDING LIST][USERNAME]: %s\n", (char*)key);
-  fprintf(stdout,"[SENDING LIST][IP]: %s\n", (char*)((usr_list_elem_t*)value)->client_ip);
-  fprintf(stdout, "[SENDING LIST][FLAG]: %c\n", (char)((usr_list_elem_t*)value)->a_flag);
+  //fprintf(stdout, "[SENDING LIST][USERNAME]: %s\n", (char*)key);
+  //fprintf(stdout,"[SENDING LIST][IP]: %s\n", (char*)(((usr_list_elem_t*)value)->client_ip));
+  //fprintf(stdout, "[SENDING LIST][FLAG]: %c\n", (char)(((usr_list_elem_t*)value)->a_flag));
 
   send_msg(*((int*)user_data), buf); //(socket, buf);
-
-
-  ret = sem_post(&user_list_mutex);
-  ERROR_HELPER(ret, "[SENDING LIST]: cannot post on user_list_mutex");
   return;
 }
 
@@ -147,27 +143,27 @@ void execute_command(thread_args_t* args, char* availability_buf, usr_list_elem_
     case UNAVAILABLE :
       mod_command = MODIFY;
       update_availability(element_to_update, &availability);
-      //pushing updates to mailboxes
+
       message = build_mailbox_message(args->client_user_name, mod_command);
-      FOR_EACH(mailbox_list, (GHFunc)push_entry, message);
+
       fprintf(stdout, "[CONNECTION THREAD]: unavailable command processed\n");
       break;
 
     case AVAILABLE :
       mod_command = MODIFY;
       update_availability(element_to_update, &availability);
-      //pushing updates to mailboxes
+
       message = build_mailbox_message(args->client_user_name, mod_command);
-      FOR_EACH(mailbox_list, (GHFunc)push_entry, message);
+
       fprintf(stdout, "[CONNECTION THREAD]: available command procesed\n");
       break;
 
     case DISCONNECT:
       mod_command = DELETE;
       remove_entry(args->client_user_name, args->mailbox_key);
-      //pushing updates to mailboxes
+
       message = build_mailbox_message(args->client_user_name, mod_command);
-      FOR_EACH(mailbox_list, (GHFunc)push_entry, message);
+
       fprintf(stdout, "[CONNECTION THREAD]: disconnect command processed\n");
       //thread's close operations;
       break;//never executed beacuse in close operations, the thread exit safely
@@ -175,6 +171,16 @@ void execute_command(thread_args_t* args, char* availability_buf, usr_list_elem_
       //throw error
       return;
   }
+
+  //pushing updates to mailboxes
+  int ret = sem_wait(&mailbox_list_mutex);
+  ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on user_list_mutex");
+
+  FOR_EACH(mailbox_list, (GHFunc)push_entry, (gpointer)message);
+
+  ret = sem_post(&mailbox_list_mutex);
+  ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
+
   return;
 }
 
@@ -234,23 +240,23 @@ void* connection_handler(void* arg){
   //ret = fcntl(args->socket, F_SETFL, fcntl(args->socket, F_GETFL) | O_NONBLOCK);
   //ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot set socket in non-blocking mode");
 
-  fprintf(stderr, "[CONNECTION THREAD]: allocazione user element da inserire nella lista\n");
+  fprintf(stderr, "[CONNECTION THREAD %d]: allocazione user element da inserire nella lista\n", args->id);
 
   //user list element
   usr_list_elem_t* element = (usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
 
   //filling element struct with client data;
   element->client_ip = (char*)malloc(INET_ADDRSTRLEN*sizeof(char));
-  memcpy(element->client_ip, args->client_ip, INET_ADDRSTRLEN);
+  memcpy(element->client_ip, args->client_ip, strlen(args->client_ip)+1);
   element->a_flag = UNAVAILABLE;
 
   //inserting user into hash-table userlist
   ret = sem_wait(&user_list_mutex);
-  ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
+  ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on user_list_mutex");
 
   ret = INSERT(user_list, (gpointer)args->client_user_name, (gpointer)element);
 
-  fprintf(stderr, "[CONNECTION THREAD]: elemento inserito con successo\n");
+  fprintf(stderr, "[CONNECTION THREAD %d]: elemento inserito con successo\n", args->id);
 
   ret = sem_post(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
@@ -258,17 +264,23 @@ void* connection_handler(void* arg){
   //pushing updates to mailboxes
   mailbox_message_t* message =  build_mailbox_message(args->client_user_name, NEW);
 
-  FOR_EACH(mailbox_list, (GHFunc)push_entry, message);
+  ret = sem_wait(&mailbox_list_mutex);
+  ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on user_list_mutex");
+
+  FOR_EACH(mailbox_list, (GHFunc)push_entry, (gpointer)message);
+
+  ret = sem_post(&mailbox_list_mutex);
+  ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
 
   free(message);
 
   //unlock sender thread
-  fprintf(stdout, "[CONNECTION THREAD]: %s\n", args->client_user_name);
+  fprintf(stdout, "[CONNECTION THREAD %d]: %s\n",args->id, args->client_user_name);
 
   ret = sem_post(args->chandler_sender_sync);
-  ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot post on chandler_sender_sync");
+  ERROR_HELPER(ret, "[CONNECTION THREAD %d]:cannot post on chandler_sender_sync");
 
-  fprintf(stdout,"[CONNECTION THREAD]:ho passato la sem post\n");
+  fprintf(stdout,"[CONNECTION THREAD %d]:ho passato la sem post\n", args->id);
 
   //command receiver buffer
   char* buf_command = (char*)calloc(2,sizeof(char));
@@ -292,14 +304,14 @@ void* sender_routine(void* arg){
   //referring mailbox
   GAsyncQueue* my_mailbox = REF(args->mailbox);
 
-  fprintf(stderr, "[SENDER THREAD]: inizializzazione indirizzo client thread receiver\n");
+  fprintf(stderr, "[SENDER THREAD %d]: inizializzazione indirizzo client thread receiver\n", args->id);
 
   struct sockaddr_in rec_addr = {0};
   rec_addr.sin_family         = AF_INET;
   rec_addr.sin_port           = htons(CLIENT_THREAD_RECEIVER_PORT);
   rec_addr.sin_addr.s_addr    = inet_addr(args->client_ip);
 
-  fprintf(stderr, "[SENDER THREAD]: indirizzo client thread receiver inizializzato con successo\n");
+  fprintf(stderr, "[SENDER THREAD %d]: indirizzo client thread receiver inizializzato con successo\n", args->id);
 
   int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(socket_desc, "Cannot create sender thread socket");
@@ -307,15 +319,21 @@ void* sender_routine(void* arg){
   ret = connect(socket_desc, (struct sockaddr*) &rec_addr, sizeof(struct sockaddr_in));
   ERROR_HELPER(ret, "Error trying to connect to client receiver thread");
 
-  fprintf(stderr, "[SENDER THREAD]: conneso al receiver thread\n");
+  fprintf(stderr, "[SENDER THREAD %d]: conneso al receiver thread\n", args->id);
 
   ret = sem_wait(args->chandler_sender_sync);//aspetto che cHandler abbia inserito nella lista per eseguire l'invio completo
   ERROR_HELPER(ret, "[SENDER THREAD]: cannot wait on chandler_sender_sync semaphore");
 
   //sending list to client (thread safe)
-  FOR_EACH(user_list, (GHFunc)send_list_on_client_connection, &socket_desc);
+  fprintf(stdout, "ciao");
+  ret = sem_wait(&user_list_mutex);
+  ERROR_HELPER(ret, "[SENDER THREAD]: cannot wait on user_list_mutex");
 
-  fprintf(stderr, "[SENDER THREAD]: sended list on first connection");
+  FOR_EACH(user_list, (GHFunc)send_list_on_client_connection, (gpointer)&socket_desc);
+
+  ret = sem_post(&user_list_mutex);
+  ERROR_HELPER(ret, "[SENDER THREAD]: cannot wait on user_list_mutex");
+  fprintf(stderr, "[SENDER THREAD %d]: sended list on first connection", args->id);
 
   //retrieving changes from mailbox and sending to client
   //buffer to be sent
@@ -335,21 +353,21 @@ void* sender_routine(void* arg){
     //using username to retrieve changes from userlist
     ret = sem_wait(&user_list_mutex);//wait for other threads
     ERROR_HELPER(ret, "[SENDER THREAD]: cannot wait on user_list_mutex semaphore");
-    usr_list_elem_t* element_to_serialize = (usr_list_elem_t*)LOOKUP(user_list, username);
+    usr_list_elem_t* element_to_serialize = (usr_list_elem_t*)LOOKUP(user_list, (gconstpointer)username);
 
     //serializing message
     serialize_user_element(send_buf, element_to_serialize, username, buf_command);
-    fprintf(stdout, "[SENDER THREAD]: message serialized = %s\n", send_buf);
+    fprintf(stdout, "[SENDER THREAD %d]: message serialized = %s\n", args->id,send_buf);
 
     ret = sem_post(&user_list_mutex);//unlock semaphore
     ERROR_HELPER(ret, "[SENDER THREAD]: cannot post on user_list_mutex semaphore");
-    
+
     //not freeing client username becuause is freed in free_user_list_element_key
     free(message);
 
     //sending message to client's receiver thread
     send_msg(socket_desc, send_buf);
-    fprintf(stdout, "[SENDER THREAD]: message sended to client's reciever thread\n");
+    fprintf(stdout, "[SENDER THREAD %d]: message sended to client's reciever thread\n", args->id);
     bzero(send_buf, USERLIST_BUFF_SIZE);
   }
   //CLOSE OPERATIONS TO BE HANDLED BY SIGNAL handler
@@ -360,7 +378,7 @@ void* sender_routine(void* arg){
   ret = close(socket_desc);
   ERROR_HELPER(ret, "Error closing socket_desc in sender routine");
 
-  fprintf(stdout, "[SENDER THREAD]: routine exit point\n");
+  fprintf(stdout, "[SENDER THREAD %d]: routine exit point\n", args->id);
   pthread_exit(NULL);
 }
 
@@ -447,7 +465,7 @@ int main(int argc, char const *argv[]) {
       //arguments allocation
       char* client_user_name = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
       char* client_ip = (char*)malloc(INET_ADDRSTRLEN*sizeof(char));
-      memcpy(client_ip, client_ip_buf, INET_ADDRSTRLEN);
+      memcpy(client_ip, client_ip_buf, strlen(client_ip_buf)+1);
 
       thread_args_t* thread_args = (thread_args_t*)malloc(sizeof(thread_args_t));
       thread_args->socket               = client_desc;
@@ -455,6 +473,7 @@ int main(int argc, char const *argv[]) {
       thread_args->client_ip            = client_ip;
       thread_args->chandler_sender_sync = chandler_sender_sync;
       thread_args->mailbox_key          = client_user_name;
+      thread_args->id                   = thread_count;
 
       //inserting  mailbox_queue in mailbox hash table for usage by chandlers notifying system
       ret = sem_wait(&mailbox_list_mutex);
@@ -472,8 +491,9 @@ int main(int argc, char const *argv[]) {
 
       sender_args->chandler_sender_sync = chandler_sender_sync;
       sender_args->client_ip = (char*)malloc(sizeof(INET_ADDRSTRLEN));
-      memcpy(sender_args->client_ip, client_ip_buf, INET_ADDRSTRLEN);
+      memcpy(sender_args->client_ip, client_ip_buf, strlen(client_ip_buf)+1);
       sender_args->mailbox = mailbox_queue;
+      sender_args->id = thread_count;
 
       fprintf(stderr, "[MAIN]: preparati argomenti per il sender thread\n");
 
@@ -482,7 +502,7 @@ int main(int argc, char const *argv[]) {
 
       fprintf(stderr, "[MAIN]: ricezione username completata con successo\n");
       //copying username into struct
-      memcpy(thread_args->client_user_name, username_receiver_buf, strlen(username_receiver_buf));
+      memcpy(thread_args->client_user_name, username_receiver_buf, strlen(username_receiver_buf)+1);
 
       //connection handler thread spawning
       pthread_t thread_client;

@@ -8,12 +8,14 @@ typedef struct thread_args_s{
   char* client_user_name; //key for userlist hash table
   sem_t* chandler_sender_sync;
   char* mailbox_key;//key for mailbox hash table
+  int id;
 } thread_args_t;
 
 typedef struct sender_thread_args_s{
   sem_t* chandler_sender_sync;//sync between chandlers and senders
   char* client_ip;
   GAsyncQueue* mailbox;//mailbox for message received from chandlers
+  int id;
 }sender_thread_args_t;
 
 //void create_user_list_element(usr_list_elem_t* element, char* ip, thread_args_t* args, char* buf);
