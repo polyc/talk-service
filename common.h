@@ -51,7 +51,7 @@ typedef struct usr_list_elem_s{
 
 typedef struct mailbox_message_s{
   char* client_user_name; //key for userlist hash table
-  char* mod_command;
+  char mod_command;
 }mailbox_message_t;
 
 

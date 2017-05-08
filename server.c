@@ -97,15 +97,15 @@ void remove_entry(char* elem_to_remove, char* mailbox_to_remove){//to befinished
 
 //pushing message into sender thread personal AsyncQueue
 void push_entry(gpointer key, gpointer value, gpointer user_data/*parsed message*/){
-  int ret = sem_wait(&mailbox_list_mutex);
-  ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on mailbox_list_mutex");
+  //int ret = sem_wait(&mailbox_list_mutex);
+  //ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on mailbox_list_mutex");
 
   if((strcmp((char*)key, ((mailbox_message_t*)(user_data))->client_user_name)) != 0){
     PUSH((GAsyncQueue*)value, user_data);
   }
 
-  ret = sem_post(&mailbox_list_mutex);
-  ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on mailbox_list_mutex");
+  //ret = sem_post(&mailbox_list_mutex);
+  //ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on mailbox_list_mutex");
   return;
 }
 
