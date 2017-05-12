@@ -22,6 +22,8 @@
 #define UNREF g_async_queue_unref
 #define PUSH g_async_queue_push
 #define POP g_async_queue_timeout_pop
+#define LOCK g_async_queue_lock
+#define UNLOCK g_async_queue_unlock
 
 //server commands macros
 #define AVAILABLE   'a'
@@ -48,11 +50,5 @@ typedef struct usr_list_elem_s{
   char* client_ip;
   char a_flag;
 }usr_list_elem_t;
-
-typedef struct mailbox_message_s{
-  char* client_user_name; //key for userlist hash table
-  char mod_command;
-}mailbox_message_t;
-
 
 #endif
