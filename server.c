@@ -61,12 +61,11 @@ void get_and_check_username(int socket, char* username){
 
 void update_availability(usr_list_elem_t* elem_to_update, char* buf_command){
   //updating user_list
-  fprintf(stdout, "SONO QUI\n" );
   int ret = sem_wait(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD][UPDATING AVAILABILITY]: cannot wait on user_list_mutex");
 
   elem_to_update->a_flag = *buf_command; //update availability flag
-  fprintf(stdout, "AOOOOOOO\n" );
+
   ret = sem_post(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD][UPDATING AVAILABILITY]: cannot post on user_list_mutex");
 
@@ -97,9 +96,10 @@ void remove_entry(char* elem_to_remove, char* mailbox_to_remove){//to befinished
 
 //pushing message into sender thread personal AsyncQueue
 void push_entry(gpointer key, gpointer value, gpointer user_data/*parsed message*/){
-
+    char* message = (char*)malloc(USERLIST_BUFF_SIZE*sizeof(char));
+    message = strcpy(message, (char*)user_data);
   //if((strcmp((char*)key, ((mailbox_message_t*)(user_data))->client_user_name)) != 0){
-    PUSH((GAsyncQueue*)value, user_data);
+    PUSH((GAsyncQueue*)value, (gpointer)message);
   //}
   return;
 }
@@ -176,6 +176,7 @@ void execute_command(thread_args_t* args, char* availability_buf, usr_list_elem_
   ret = sem_post(&mailbox_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
 
+  free(message);
   return;
 }
 
