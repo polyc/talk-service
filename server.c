@@ -51,8 +51,8 @@ void get_and_check_username(int socket, char* username){
       send_buf[0] = UNAVAILABLE;
       send_buf[1] = '\n';
       send_msg(socket, send_buf);
-      memset(username, USERNAME_BUF_SIZE, 0);
-      memset(send_buf, 2, 0);
+      memset(username, 0, USERNAME_BUF_SIZE);
+      memset(send_buf, 0, 2);
     }
   }
   fprintf(stdout, "[MAIN]: username getted\n");
@@ -475,7 +475,7 @@ int main(int argc, char const *argv[]) {
       ERROR_HELPER(ret, "[MAIN]:cannot init chandler_sync sempahore");
 
       sem_t* sender_sync = (sem_t*)malloc(sizeof(sem_t));
-      ret = sem_init(chandler_sync, 0, 0);
+      ret = sem_init(sender_sync, 0, 0);
       ERROR_HELPER(ret, "[MAIN]:cannot init sender_sync sempahore");
 
       //mailbox init
