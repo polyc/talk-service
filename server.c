@@ -51,8 +51,8 @@ void get_and_check_username(int socket, char* username){
       send_buf[0] = UNAVAILABLE;
       send_buf[1] = '\n';
       send_msg(socket, send_buf);
-      bzero(username, USERNAME_BUF_SIZE);
-      bzero(send_buf, 2);
+      memset(username, USERNAME_BUF_SIZE, 0);
+      memset(send_buf, 2, 0);
     }
   }
   fprintf(stdout, "[MAIN]: username getted\n");
@@ -389,7 +389,6 @@ void* sender_routine(void* arg){
     //sending message to client's receiver thread
     send_msg(socket_desc, message);
     fprintf(stdout, "[SENDER THREAD %d]: message sended to client's reciever thread\n", args->id);
-    //bzero(send_buf, USERLIST_BUFF_SIZE);
   }
   //Close operations
   UNREF(args->mailbox);
