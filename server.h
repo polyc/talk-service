@@ -6,15 +6,18 @@ typedef struct thread_args_s{
   int socket;
   char* client_ip;
   char* client_user_name; //key for userlist hash table
-  sem_t* chandler_sender_sync;
+  sem_t* chandler_sync;
+  sem_t* sender_sync;
   char* mailbox_key;//key for mailbox hash table
   int id;
 } thread_args_t;
 
 typedef struct sender_thread_args_s{
-  sem_t* chandler_sender_sync;//sync between chandlers and senders
+  sem_t* chandler_sync;//sync between chandlers and senders
+  sem_t* sender_sync;
   char* client_ip;
   GAsyncQueue* mailbox;//mailbox for message received from chandlers
+  char* mailbox_key;
   int id;
 }sender_thread_args_t;
 
