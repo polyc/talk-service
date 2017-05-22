@@ -35,3 +35,4 @@ void remove_mailbox(char* mailbox_to_remove);
 void push_entry(gpointer key, gpointer value, gpointer user_data/*parsed message*/);
 void cleanup_client(thread_args_t* args);
 void push_to_mailboxes(char* message);
+
