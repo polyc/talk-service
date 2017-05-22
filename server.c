@@ -29,15 +29,15 @@ void get_and_check_username(int socket, char* username){
   char* send_buf = (char*)calloc(2, sizeof(char)); //buffer used to send response to client
   while(1){
     int ret = recv_msg(socket, username, USERNAME_BUF_SIZE);
-    ERROR_HELPER(ret, "[MAIN]: cannot receive username");
+    ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot receive username");
 
     ret = sem_wait(&user_list_mutex);
-    ERROR_HELPER(ret, "[MAIN]:cannot wait on user_list_mutex");
+    ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot wait on user_list_mutex");
 
     //check if username is in user_list GHashTable
     if(CONTAINS(user_list, username) == FALSE){
       ret = sem_post(&user_list_mutex);
-      ERROR_HELPER(ret, "[MAIN]:cannot post on user_list_mutex");
+      ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot post on user_list_mutex");
 
       send_buf[0] = AVAILABLE;
       send_buf[1] = '\n';
@@ -46,7 +46,7 @@ void get_and_check_username(int socket, char* username){
     }
     else{
       ret = sem_post(&user_list_mutex);
-      ERROR_HELPER(ret, "[MAIN]:cannot post on user_list_mutex");
+      ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot post on user_list_mutex");
 
       send_buf[0] = UNAVAILABLE;
       send_buf[1] = '\n';
@@ -107,8 +107,11 @@ void remove_entry(char* elem_to_remove, char* mailbox_to_remove){
 void push_entry(gpointer key, gpointer value, gpointer user_data/*parsed message*/){
     char* message = (char*)malloc(USERLIST_BUFF_SIZE*sizeof(char));
     message = strcpy(message, (char*)user_data);
+
   //if((strcmp((char*)key, ((mailbox_message_t*)(user_data))->client_user_name)) != 0){
-    PUSH((GAsyncQueue*)value, (gpointer)message);
+    GAsyncQueue* ref_value = REF((GAsyncQueue*)value);
+    PUSH(ref_value, (gpointer)message);
+    UNREF(ref_value);
   //}
   return;
 }
@@ -122,11 +125,6 @@ void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_
   char* buf = (char*)calloc(USERLIST_BUFF_SIZE, sizeof(char));
 
   serialize_user_element(buf, (usr_list_elem_t*)value, (char*)key, NEW);
-  //fprintf(stdout, "[SENDING LIST]: serialized element: %s\n", buf);
-
-  //fprintf(stdout, "[SENDING LIST][USERNAME]: %s\n", (char*)key);
-  //fprintf(stdout,"[SENDING LIST][IP]: %s\n", (char*)(((usr_list_elem_t*)value)->client_ip));
-  //fprintf(stdout, "[SENDING LIST][FLAG]: %c\n", (char)(((usr_list_elem_t*)value)->a_flag));
 
   send_msg(*((int*)user_data), buf); //(socket, buf);
   return;
@@ -294,11 +292,11 @@ void* connection_handler(void* arg){
 
 
   //command receiver buffer
-  char* buf_command = (char*)calloc(2,sizeof(char));
+  char* buf_command = (char*)calloc(3,sizeof(char));
 
   //RECEIVING COMMANDS
   while(1){
-    int ret = recv_msg(args->socket, buf_command, 2);
+    int ret = recv_msg(args->socket, buf_command, 3);
     ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot receive server command from client");
 
     ret = execute_command(args, buf_command, element);
@@ -362,7 +360,7 @@ void* sender_routine(void* arg){
   GAsyncQueue* my_mailbox = REF(args->mailbox);
 
   //unlock chandler thread
-  ret = sem_post(args->chandler_sync);
+  ret = sem_post(args->sender_sync);
   ERROR_HELPER(ret, "[SENDER THREAD]: cannot post on chandler_sync semaphore");
 
   //sending list to client
