@@ -28,12 +28,7 @@ char* available;
 char* unavailable;
 char* disconnect;
 
-static volatile int keepRunning = 1;
 static volatile int chat_session_running;
-
-void main_interrupt_handler(int dummy){
-    keepRunning = 0;
-}
 
 static void print_userList(gpointer key, gpointer elem, gpointer data){
 
@@ -56,7 +51,7 @@ static void print_userList(gpointer key, gpointer elem, gpointer data){
     fprintf(stdout, "[PRINT_USERLIST] Flag:     UNAVAILABLE\n");
   }
 
-  fprintf(stdout, "[PRINT_USERLIST]###############################################\n\n");
+  fprintf(stdout, "[PRINT_USERLIST]###############################################\n");
   fflush(stdout);
   return;
 }
@@ -82,6 +77,9 @@ int list_command(char* command){
 void* listen_routine(void* args){
 
   int ret;
+
+  ret = prctl(PR_SET_PDEATHSIG, SIGINT);
+  ERROR_HELPER(ret, "[LISTEN_ROUTINE] error on prctl function");
 
   client_thread_args_t* arg = (client_thread_args_t*)args;
 
@@ -159,6 +157,9 @@ void* connect_routine(void* args){
 
   int ret;
 
+  ret = prctl(PR_SET_PDEATHSIG, SIGINT);
+  ERROR_HELPER(ret, "[CONNECT_ROUTINE] error on prctl function");
+
   //socket descriptor for connect thread
   int connect_socket = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(connect_socket, "[CONNECT_ROUTINE] Error while creating connect thread socket descriptor");
@@ -173,14 +174,18 @@ void* connect_routine(void* args){
     pthread_exit(NULL);
   }
 
+
   //mutual exlusion on user_list hashtable
-  ret = sem_wait(&sync_userList);
-  ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in wait function on sync_userList semaphore\n");
+  //ret = sem_wait(&sync_userList);
+  //ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in wait function on sync_userList semaphore\n");
 
-  FOR_EACH(user_list, (GHFunc)print_userList, NULL); //printing hashtable
+  //FOR_EACH(user_list, (GHFunc)print_userList, NULL); //printing hashtable
 
-  ret = sem_post(&sync_userList);
-  ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in post function on sync_userList semaphore\n");
+  //ret = sem_post(&sync_userList);
+  //ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in post function on sync_userList semaphore\n");
+
+
+  list_command("list");
 
   //buffer for target to connect to
   char* target = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
@@ -188,29 +193,32 @@ void* connect_routine(void* args){
   //getting information of the target
   usr_list_elem_t* target_elem;
 
+  //getting a copy of MY_USERNAME to control that i cant connect to myself
+  char* my_username_cpy = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
+  strncpy(my_username_cpy, USERNAME, USERNAME_BUF_SIZE);
+
   //checking for correct username to connect to
   while(1){
 
     //letting user decide who to connect to
     fprintf(stdout, "[CONNECT_ROUTINE] Connect to: ");
 
+    memset(target, 0, USERNAME_BUF_SIZE);
+
     fflush(stdin);
     fgets(target, USERNAME_BUF_SIZE, stdin);
 
     strtok(target, "\n");
 
-    char* username_cpy = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
-    strncpy(username_cpy, USERNAME, USERNAME_BUF_SIZE);
-    username_cpy = strtok(username_cpy, "\n");
-
-    if(strcmp(target, username_cpy)==0){
+    if(strcmp(target, my_username_cpy) == 0){
 
       fprintf(stdout, "[CONNECT_ROUTINE] Impossible to connect with yourself...\n");
-      free(username_cpy);
+
+      memset(my_username_cpy, 0, USERNAME_BUF_SIZE);
       continue;
     }
 
-    free(username_cpy);
+    //free(my_username_cpy);
 
     if(list_command(target)==1){
 
@@ -220,6 +228,10 @@ void* connect_routine(void* args){
     if(strcmp(target, "exit connect")==0){
 
       fprintf(stdout, "[CONNECT_ROUTINE] exiting connect routine\n");
+
+      // close connection to client socket
+      ret = close(connect_socket);
+      ERROR_HELPER(ret, "[CONNECT_ROUTINE] Cannot close connect_socket");
 
       free(target);
 
@@ -258,6 +270,7 @@ void* connect_routine(void* args){
   ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error trying to connect to target");
 
   //sending username to receiver client so he knows who it is
+  //strcat is for sending recv_msg wont stop if it doesnt find \n at the end of message
   USERNAME = strcat(USERNAME, "\n");
   send_msg(connect_socket, USERNAME);
   USERNAME = strtok(USERNAME, "\n");
@@ -279,6 +292,10 @@ void* connect_routine(void* args){
 }
 
 int get_username(char* username, int socket){
+
+  //changed USERNAME_BUF_SIZE + 1 because fgets puts in buffer the \n character
+  //if there are problems take away +1
+
   int i, ret;
 
   fprintf(stdout, "[GET_USERNAME] Enter username: ");
@@ -286,14 +303,14 @@ int get_username(char* username, int socket){
   username = fgets(username, USERNAME_BUF_SIZE, stdin);
 
   //checking if username has atleast 1 character
-  if(strlen(username)==1){ //because there is a \n got from fgets
+  if(strlen(username)-1 == 0){ //because there is a \n got from fgets
     fprintf(stdout, "[GET_USERNAME] No username input\n");
     fflush(stdout);
     return 0;
   }
 
   //checking if username contains '-' character
-  for(i=0; i<sizeof(username); i++){
+  for(i=0; i < strlen(username); i++){
     if(username[i]=='-'){
       fprintf(stdout, "[GET_USERNAME] Char '-' found in username ... input correct username\n");
       fflush(stdout);
@@ -303,7 +320,7 @@ int get_username(char* username, int socket){
 
   //sending buffer init data for user list
   //creating buffer for username and availability flag
-  char* buf = (char*)calloc(USERNAME_BUF_SIZE,sizeof(char));
+  char* buf = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
   strncpy(buf, username, strlen(username));
 
   //sending username to server
@@ -312,7 +329,7 @@ int get_username(char* username, int socket){
   fprintf(stdout, "[GET_USERNAME] sent username [%s] to server\n", buf);
 
   //checking if username already in use
-  bzero(buf, USERNAME_BUF_SIZE);
+  memset(buf, 0, USERNAME_BUF_SIZE);
 
   ret = recv_msg(socket, buf, 2);
   ERROR_HELPER(ret, "[GET_USERNAME] Error receiving username check from server");
@@ -323,6 +340,7 @@ int get_username(char* username, int socket){
     free(buf);
     return 0;
   }
+
   free(buf);
   return 1; //usrname ok
 }
@@ -427,6 +445,11 @@ void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName,
 
 void* read_updates(void* args){
 
+  int ret;
+
+  ret = prctl(PR_SET_PDEATHSIG, SIGINT);
+  ERROR_HELPER(ret, "[READ_UPDATES] error on prctl function");
+
   fprintf(stdout, "[READ_UPDATES] inside function read_updates\n");
 
   GAsyncQueue* buf = (GAsyncQueue*)args;
@@ -449,12 +472,12 @@ void* read_updates(void* args){
     fprintf(stdout, "[READ_UPDATES] %s\n", elem_buf);
 
     //creating struct usr_list_elem_t* for create_elem_list function
-    usr_list_elem_t* elem = (usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
-    elem->client_ip = (char*)calloc(INET_ADDRSTRLEN,sizeof(char*));
+    usr_list_elem_t* elem = (usr_list_elem_t*)calloc(1, sizeof(usr_list_elem_t));
+    elem->client_ip = (char*)calloc(INET_ADDRSTRLEN,sizeof(char));
 
     //creating buffer for username and command to pass to create_elem_list function
     char* userName = (char*)calloc(USERNAME_BUF_SIZE,sizeof(char));
-    char* command = (char*)calloc(1,sizeof(char)); //ricordare che hai cambiato prima era una calloc
+    char* command = (char*)calloc(2, sizeof(char)); //ricordare che hai cambiato prima era una calloc
 
     fprintf(stdout, "[READ_UPDATES] passing element to parse function\n");
 
@@ -479,12 +502,17 @@ void* usr_list_recv_thread_routine(void* args){
 
   int ret;
 
+  ret = prctl(PR_SET_PDEATHSIG, SIGINT);
+  ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] error on prctl function");
+
   //socket descriptor for user list receiver thread
   int usrl_recv_socket = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(usrl_recv_socket, "[RECV_THREAD_ROUTINE] Error while creating user list receiver thread socket descriptor");
 
   //creating buffers to store modifications sent by server
-  GAsyncQueue* buf_modifications = g_async_queue_new();
+  GAsyncQueue* mail_box = mailbox_queue_init();
+
+  GAsyncQueue* buf_modifications = REF(mail_box);
 
   //creating thread to manage updates to user list
   pthread_t manage_updates;
@@ -531,27 +559,29 @@ void* usr_list_recv_thread_routine(void* args){
   fprintf(stderr, "[RECV_THREAD_ROUTINE] accepted connection from server\n");
 
   //buffer for recv_msg function
-  char* buf = (char*)calloc(USERLIST_BUFF_SIZE,sizeof(char));
+  char* buf = (char*)calloc(USERLIST_BUFF_SIZE, sizeof(char));
 
   //receiving user list element from server
   while(1){
-    bzero(buf, USERLIST_BUFF_SIZE);
+      memset(buf, 0, USERLIST_BUFF_SIZE);
 
       //receiveing user list element from server
       ret = recv_msg(rec_socket, buf, USERLIST_BUFF_SIZE);
 
       if(ret==-1){
-        continue;
+        break;
       }
 
-      char* queueBuf_elem = (char*)malloc(strlen(buf)*sizeof(char));
+      size_t len = strlen(buf);
+      char* queueBuf_elem = (char*)calloc(len, sizeof(char));
 
-      memcpy(queueBuf_elem, buf, strlen(buf));
+      memcpy(queueBuf_elem, buf, len);
 
       g_async_queue_push(buf_modifications, (gpointer)queueBuf_elem);
 
   } //end of while(1)
 
+  //this part of code will only be executed if server quits
 
   fprintf(stderr, "[RECV_THREAD_ROUTINE] closing rec_socket and arg->socket...\n");
 
@@ -563,13 +593,9 @@ void* usr_list_recv_thread_routine(void* args){
 
   fprintf(stderr, "[RECV_THREAD_ROUTINE] closed rec_socket and arg->socket succesfully\n");
 
-  //joining manage_updates thread
-  ret = pthread_join(manage_updates, NULL);
-  PTHREAD_ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] Unable to join manage_updates thread");
-
   free(buf);
   free(usrl_sender_address);
-  g_async_queue_unref(buf_modifications);
+  UNREF(buf_modifications);
 
   fprintf(stderr, "[RECV_THREAD_ROUTINE] exiting usr_list_recv_thread_routine\n");
 
@@ -588,9 +614,9 @@ void* recv_routine(void* args){
 
   chat_session_args_t* arg = (chat_session_args_t*)args;
 
-  char* buf = (char*)malloc(MSG_LEN * sizeof(char));
+  char* buf = (char*)calloc(MSG_LEN, sizeof(char));
 
-  char* exit_buf = (char*)malloc(strlen("exit")*sizeof(char));
+  char* exit_buf = (char*)calloc(strlen("exit"), sizeof(char));
   exit_buf = "exit";
 
   while(1){
@@ -605,7 +631,7 @@ void* recv_routine(void* args){
 
       break;
     }
-    buf = strtok(buf, "\n");
+
     fprintf(stdout, "\n[%s] %s\n", arg->username, buf);
 
   }
@@ -629,17 +655,18 @@ void* send_routine(void* args){
 
   int ret;
 
-  fprintf(stdout, "[SEND_ROUTINE] inside send_routine\n");
-
   ret = prctl(PR_SET_PDEATHSIG, SIGINT);
   ERROR_HELPER(ret, "[SEND_ROUTINE] error on prctl function");
 
-  char* exit_buf = (char*)malloc(strlen("exit")*sizeof(char));
+  fprintf(stdout, "[SEND_ROUTINE] inside send_routine\n");
+
+
+  char* exit_buf = (char*)calloc(strlen("exit"), sizeof(char));
   exit_buf = "exit";
 
   chat_session_args_t* arg = (chat_session_args_t*)args;
 
-  char* buf = (char*)malloc(MSG_LEN * sizeof(char));
+  char* buf = (char*)calloc(MSG_LEN, sizeof(char));
 
   while(1){
 
@@ -697,12 +724,12 @@ int chat_session(char* username, int socket){
   pthread_t chat_send;
 
   //initiate arguments for both threads chat_recv and chat_send
-  chat_session_args_t* args_recv = (chat_session_args_t*)malloc(sizeof(chat_session_args_t));
+  chat_session_args_t* args_recv = (chat_session_args_t*)calloc(1, sizeof(chat_session_args_t));
   args_recv->socket   = socket;
   args_recv->username = username;
   args_recv->thread_id = &chat_send;
 
-  chat_session_args_t* args_send = (chat_session_args_t*)malloc(sizeof(chat_session_args_t));
+  chat_session_args_t* args_send = (chat_session_args_t*)calloc(1, sizeof(chat_session_args_t));
   args_send->socket   = socket;
   args_send->username = username;
   args_send->thread_id = &chat_recv;
@@ -734,23 +761,20 @@ int main(int argc, char* argv[]){
   int ret;
   fprintf(stdout, "[MAIN] starting main process\n");
 
-  signal(SIGINT, main_interrupt_handler);
-
   //initializing GLibHashTable for user list
   user_list = usr_list_init();
 
   //alocating buffers for availability
-  available   = (char*)calloc(2,sizeof(char));
-  unavailable = (char*)calloc(2,sizeof(char));
-  disconnect  = (char*)calloc(2,sizeof(char));
+  available   = (char*)calloc(3, sizeof(char));
+  unavailable = (char*)calloc(3, sizeof(char));
+  disconnect  = (char*)calloc(3, sizeof(char));
 
   //copying availability commands into buffers
-  fprintf(stdout, "[MAIN] strlen = %lu\n", strlen("a\n"));
   strcpy(available,   "a\n");
   strcpy(unavailable, "u\n");
   strcpy(disconnect,  "c\n");
 
-  fprintf(stdout, "[MAIN][BUFF_TEST] %c, %c, %s", available[0], unavailable[0], disconnect);
+  fprintf(stdout, "[MAIN][BUFF_TEST] %c, %c, %c", available[0], unavailable[0], disconnect[0]);
 
   fprintf(stdout, "[MAIN] initializing semaphores...\n");
 
@@ -781,7 +805,6 @@ int main(int argc, char* argv[]){
   fprintf(stdout, "[MAIN] created data structure for connection with server\n");
 
 
-
   //user list receiver thread
   //
   //creating and spawning user list receiver thread with parameters
@@ -808,7 +831,7 @@ int main(int argc, char* argv[]){
   fprintf(stdout, "[MAIN] connected to server\n");
 
   //initializing username buffer
-  USERNAME = (char*)malloc(USERNAME_BUF_SIZE*sizeof(char));
+  USERNAME = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
 
   //getting username from user   add max number of attempts
   while(1){
@@ -816,48 +839,51 @@ int main(int argc, char* argv[]){
     if(ret==1){
       break;
     }
-    bzero(USERNAME, USERNAME_BUF_SIZE); //setting buffer to 0
-    strcpy(USERNAME, "");
+    memset(USERNAME, 0, USERNAME_BUF_SIZE); //setting buffer to 0
+    //strcpy(USERNAME, "");
   }
 
   USERNAME = strtok(USERNAME, "\n");
 
+
   fprintf(stdout, "[MAIN] got username: [%s]\n", USERNAME);
 
-  char* buf_commands = (char*)malloc(8*sizeof(char));
+  char* buf_commands = (char*)calloc(MAIN_CMD_LEN, sizeof(char));
 
   pthread_t connect_thread;
   pthread_t thread_listen;
 
   //creating parameters for listen thread
-  client_thread_args_t* listen_thread_args = (client_thread_args_t*)malloc(sizeof(client_thread_args_t));
+  client_thread_args_t* listen_thread_args = (client_thread_args_t*)calloc(1, sizeof(client_thread_args_t));
   listen_thread_args->socket = socket_desc;
 
   //creating parameters for connect thread funtion
-  client_thread_args_t* connect_thread_args = (client_thread_args_t*)malloc(sizeof(client_thread_args_t));
+  client_thread_args_t* connect_thread_args = (client_thread_args_t*)calloc(1, sizeof(client_thread_args_t));
   connect_thread_args->socket = socket_desc;
 
-  while(keepRunning){
+  while(1){
 
     //creating sempahore for syncronization between connect_routine and listen_routine
     ret = sem_init(&sync_chat, 0, 0);
     ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_chat");
 
-    bzero(buf_commands, 8);
-    fprintf(stdout, "[MAIN] exit/connect/listen: ");
-    fgets(buf_commands, 8, stdin);
+    memset(buf_commands, 0, MAIN_CMD_LEN);
 
+    fprintf(stdout, "[MAIN] exit/connect/listen: ");
+
+    fgets(buf_commands, MAIN_CMD_LEN, stdin);
     buf_commands = strtok(buf_commands, "\n");
 
     if(list_command(buf_commands)==1){
       continue;
     }
 
-    if(strcmp(buf_commands, "listen")==0){
+    if( strcmp(buf_commands, "listen")==0){
 
       //sending availability to server
       send_msg(socket_desc, available);
-      fprintf(stdout, "[MAIN] available:  %s\n", available);
+
+      fprintf(stdout, "[MAIN] available:  %c\n", available[0]);
 
       //creating and spawning thread listen with parameters
       ret = pthread_create(&thread_listen, NULL, listen_routine, (void*)listen_thread_args);
@@ -870,11 +896,6 @@ int main(int argc, char* argv[]){
     }
 
     if(strcmp(buf_commands, "connect")==0){
-
-      /*
-      ret = sem_wait(&sync_connect_listen);
-      ERROR_HELPER(ret, "[MAIN] Error in wait function on sync_connect_listen semaphore\n");
-      */
 
       fprintf(stderr, "[MAIN] Creating connect_thread...\n");
 
@@ -900,8 +921,6 @@ int main(int argc, char* argv[]){
 
   }
 
-  fprintf(stdout, "\n[MAIN] catched signal CTRL-C...\n");
-
   //sending disconnect command to server
   send_msg(socket_desc, disconnect);
 
@@ -912,11 +931,6 @@ int main(int argc, char* argv[]){
 
   ret = sem_destroy(&sync_chat);
   ERROR_HELPER(ret, "[MAIN] Error destroying &sync_chat semaphore");
-
-  /*
-  ret = sem_destroy(&sync_connect_listen);
-  ERROR_HELPER(ret, "[MAIN] Error destroying &sync_connect_listen semaphore");
-  */
 
   fprintf(stdout, "[MAIN] freeing allocated data...\n");
 

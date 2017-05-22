@@ -11,6 +11,7 @@ typedef struct chat_session_args_s{
 }chat_session_args_t;
 
 #define MSG_LEN 256
+#define MAIN_CMD_LEN 9
 
 //thread routines
 void* usr_list_recv_thread_routine(void *args);
