@@ -25,11 +25,14 @@ typedef struct sender_thread_args_s{
 
 void* connection_handler(void* arg);
 void* sender_routine(void* arg);
-void get_and_check_username(int socket, char* username);
+int get_and_check_username(int socket, char* username);
 void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command);
 int execute_command(thread_args_t* args, char* availability_buf, usr_list_elem_t* element_to_update);
 void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_data);
 void update_availability(usr_list_elem_t* element_to_update, char* buf_command);
-void remove_entry(char* elem_to_remove, char* mailbox_to_remove);
+void remove_entry(char* elem_to_remove);
+void remove_mailbox(char* mailbox_to_remove);
 void push_entry(gpointer key, gpointer value, gpointer user_data/*parsed message*/);
-void pop_entry();
+void cleanup_client(thread_args_t* args);
+void push_to_mailboxes(char* message);
+
