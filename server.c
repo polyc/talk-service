@@ -104,7 +104,8 @@ void remove_entry(char* elem_to_remove, char* mailbox_to_remove){
 }
 
 //pushing message into sender thread personal GAsyncQueue
-void push_entry(gpointer key, gpointer value, gpointer user_data/*parsed message*/){
+void push_entry(gpointer key, gpointer value, gpointer user_data/*parsed message*/){  //DA FINIRE
+  //bisogna gestire l'invio a se stesso
     char* message = (char*)malloc(USERLIST_BUFF_SIZE*sizeof(char));
     message = strcpy(message, (char*)user_data);
 
@@ -319,7 +320,7 @@ void* connection_handler(void* arg){
   pthread_exit(EXIT_SUCCESS);
 }
 
-//list changes communication routine
+//push notification communication routine
 void* sender_routine(void* arg){
   int ret;
 
@@ -460,7 +461,7 @@ int main(int argc, char const *argv[]) {
     while (1) {
       client_desc = accept(server_desc, (struct sockaddr*) client_addr, (socklen_t*) &sockaddr_len);
       if (client_desc == -1 && errno == EINTR) continue; // check for interruption by signals
-      ERROR_HELPER(client_desc, "Cannot open socket for incoming connection");
+      ERROR_HELPER(client_desc, "[MAIN]:cannot open socket for incoming connection");
 
       fprintf(stderr, "[MAIN]: connessione accettata\n");
 
