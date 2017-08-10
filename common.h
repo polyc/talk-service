@@ -7,6 +7,7 @@
 #define CLIENT_THREAD_RECEIVER_PORT 1026
 #define USERNAME_BUF_SIZE 17
 #define USERLIST_BUFF_SIZE 7 + USERNAME_BUF_SIZE + INET_ADDRSTRLEN
+#define MSG_LEN 256
 #define POP_TIMEOUT 2000000
 
 //Glib hash manipulation macros
@@ -28,11 +29,13 @@
 //server commands macros
 #define AVAILABLE   'a'
 #define UNAVAILABLE 'u'
-#define DISCONNECT  'c'
+#define DISCONNECT  'c' //disconnecting from server
 #define NEW         'n'
 #define MODIFY      'm'
 #define DELETE      'd'
 #define QUIT        'q'
+#define MESSAGE     'x'
+#define CONNECTION_REQUEST     'r' //client wants to chat with someone
 
 #define GENERIC_ERROR_HELPER(cond, errCode, msg) do {             \
         if (cond) {                                               \

@@ -24,6 +24,14 @@ GHashTable* user_list;
 GHashTable* mailbox_list;
 int thread_count;
 
+char* parse_username(char* src, char*dest){
+  int i;
+  for (i = 1; i < USERNAME_BUF_SIZE; i++) {
+    dest[i - 1] = src[i];
+  }
+  return dest;
+}
+
 //receive username from client and check if it's already used by another connected client
 void get_and_check_username(int socket, char* username){
   char* send_buf = (char*)calloc(2, sizeof(char)); //buffer used to send response to client
@@ -131,32 +139,51 @@ void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_
   return;
 }
 
-int execute_command(thread_args_t* args, char* availability_buf, usr_list_elem_t* element_to_update){
+int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* element_to_update, char* target_buf, int* connected){
+
   int ret = 0;
   //selecting correct command
-  char availability = availability_buf[0];
+  char message_type = message_buf[0];
   char mod_command;
 
-  fprintf(stdout, "[CONNECTION THREAD] availability: %c\n", availability);
+  fprintf(stdout, "[CONNECTION THREAD] message_type: %c\n", message_type);
 
-  char* message = (char*)calloc(USERLIST_BUFF_SIZE ,sizeof(char));
+  switch(message_type){
 
-  switch(availability){
+    //handle connection requests to other clients and check if are available
+    case CONNECTION_REQUEST :
+      parse_username(message_buf, target_buf);
+
+      usr_list_elem_t* target = (usr_list_elem_t*)LOOKUP(user_list, target_buf);
+
+      if(target != NULL && target->a_flag == AVAILABLE){
+        message_buf[0] = 'y';
+        send_msg(args->socket, message_buf);
+        *connected = 1;
+      }
+      else{
+        message_buf[0] = 'n';
+        send_msg(args->socket, message_buf);
+      }
+      return 0;
+
 
     case UNAVAILABLE :
       mod_command = MODIFY;
-      update_availability(element_to_update, &availability);
+      update_availability(element_to_update, &message_type);
 
-      serialize_user_element(message, element_to_update, args->client_user_name, mod_command);
+      memset(message_buf, 0, USERLIST_BUFF_SIZE);
+      serialize_user_element(message_buf, element_to_update, args->client_user_name, mod_command);
 
       fprintf(stdout, "[CONNECTION THREAD]: unavailable command processed\n");
       break;
 
     case AVAILABLE :
       mod_command = MODIFY;
-      update_availability(element_to_update, &availability);
+      update_availability(element_to_update, &message_type);
 
-      serialize_user_element(message, element_to_update, args->client_user_name, mod_command);
+      memset(message_buf, 0, USERLIST_BUFF_SIZE);
+      serialize_user_element(message_buf, element_to_update, args->client_user_name, mod_command);
 
       fprintf(stdout, "[CONNECTION THREAD]: available command procesed\n");
       break;
@@ -167,11 +194,12 @@ int execute_command(thread_args_t* args, char* availability_buf, usr_list_elem_t
 
       //notify sender thread the termination condition
       GAsyncQueue* mailbox = (GAsyncQueue*)LOOKUP(mailbox_list, args->mailbox_key);
-      message = "exit";
-      PUSH(mailbox, (gpointer)message);
+      message_buf = "exit";
+      PUSH(mailbox, (gpointer)message_buf);
 
       //serializing update for other senders
-      serialize_user_element(message, element_to_update, args->client_user_name, mod_command);
+      memset(message_buf, 0, USERLIST_BUFF_SIZE);
+      serialize_user_element(message_buf, element_to_update, args->client_user_name, mod_command);
 
       fprintf(stdout, "[CONNECTION THREAD]: disconnect command processed\n");
       ret = -1;
@@ -185,12 +213,11 @@ int execute_command(thread_args_t* args, char* availability_buf, usr_list_elem_t
   int err = sem_wait(&mailbox_list_mutex);
   ERROR_HELPER(err, "[CONNECTION THREAD]: cannot wait on user_list_mutex");
 
-  FOR_EACH(mailbox_list, (GHFunc)push_entry, (gpointer)message);
+  FOR_EACH(mailbox_list, (GHFunc)push_entry, (gpointer)message_buf);
 
   err = sem_post(&mailbox_list_mutex);
   ERROR_HELPER(err, "[CONNECTION THREAD]: cannot post on user_list_mutex");
 
-  free(message);
   return ret;
 }
 
@@ -241,6 +268,7 @@ void* connection_handler(void* arg){
   thread_args_t* args = (thread_args_t*)arg;
 
   int ret;
+  int connected = 0; // connected == 1 : this client is "connected" to a different client
 
   //get username
   get_and_check_username(args->socket, args->client_user_name);
@@ -253,7 +281,7 @@ void* connection_handler(void* arg){
   //filling element struct with client data;
   element->client_ip = (char*)malloc(INET_ADDRSTRLEN*sizeof(char));
   memcpy(element->client_ip, args->client_ip, strlen(args->client_ip)+1);
-  element->a_flag = UNAVAILABLE;
+  element->a_flag = AVAILABLE;
 
 
   //inserting user into hash-table userlist
@@ -293,19 +321,21 @@ void* connection_handler(void* arg){
 
 
   //command receiver buffer
-  char* buf_command = (char*)calloc(3,sizeof(char));
+  char* message_buf = (char*)calloc(MSG_LEN, sizeof(char));
+
+  char* target_useraname_buf = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
 
   //RECEIVING COMMANDS
   while(1){
-    int ret = recv_msg(args->socket, buf_command, 3);
+    int ret = recv_msg(args->socket, message_buf, MSG_LEN);
     ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot receive server command from client");
 
-    ret = execute_command(args, buf_command, element);
+    ret = execute_command(args, message_buf, element, target_useraname_buf, &connected);
     if (ret < 0) break; //exit condition
   }
 
   //close operations
-  free(buf_command);
+  free(message_buf);
 
   ret = close(args->socket);
 

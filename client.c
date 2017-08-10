@@ -528,6 +528,8 @@ int main(int argc, char* argv[]){
 
     else if(strcmp(buf_commands, "connect")==0){ //per chattare
 
+      memset(buf_commands, 0, MSG_LEN);
+      
       fgets(buf_commands, MSG_LEN, stdin);  //prende lo username
       buf_commands = strcat(CONNECTION_REQUEST, buf_commands);
 
