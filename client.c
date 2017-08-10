@@ -24,12 +24,12 @@ sem_t sync_chat;
 GHashTable* user_list;
 
 char* USERNAME;
+char* USERNAME_CHAT;
 char* available;
 char* unavailable;
 char* disconnect;
 int CONNECTED; // 0 se non connesso 1 se connesso
 
-static volatile int chat_session_running;
 
 static void print_userList(gpointer key, gpointer elem, gpointer data){
 
@@ -252,14 +252,16 @@ void* read_updates(void* args){
       }
     }
 
+    fprintf(stdout, "[READ_UPDATES] Elem buff: %s\n", elem_buf);
+
     if(elem_buf[0]==MESSAGE){
 
-      if(strcmp(elem_buf+1,"exit")){
+      if(!strcmp(elem_buf+1,"exit")){
         CONNECTED = 0;
         continue;
       }
 
-      fprintf(stdout, "%s\n", elem_buf+1);
+      fprintf(stdout, "[Receiving chat] %s\n", elem_buf+1);
       free(elem_buf);
       continue;
     }
@@ -407,6 +409,7 @@ int main(int argc, char* argv[]){
 
   int ret;
   CONNECTED = 0; // non sono connesso a nessuno per adesso
+  USERNAME_CHAT = calloc(USERNAME_BUF_SIZE, sizeof(char));
 
   fprintf(stdout, "[MAIN] starting main process\n");
 
@@ -528,19 +531,51 @@ int main(int argc, char* argv[]){
 
     else if(strcmp(buf_commands, "connect")==0){ //per chattare
 
-      memset(buf_commands, 0, MSG_LEN);
-      
-      fgets(buf_commands, MSG_LEN, stdin);  //prende lo username
-      buf_commands = strcat(CONNECTION_REQUEST, buf_commands);
-
-      //sending availability to server
-      send_msg(socket_desc, buf_commands);
+      fprintf(stdout, "[MAIN] passato il connect\n");
 
       memset(buf_commands, 0, MSG_LEN);
+
+      char* user_buf = calloc(MSG_LEN, sizeof(char));
+
+      user_buf[0] = 'r';
+
+      fgets(user_buf+1, MSG_LEN, stdin);  //prende lo username
+
+      //sending chat username to server
+      send_msg(socket_desc, user_buf);
+
+      memset(buf_commands, 0, MSG_LEN);
+      memset(user_buf, 0, MSG_LEN);
 
       ret = recv_msg(socket_desc, buf_commands,2);
 
+      fprintf(stdout, "[MAIN]risposta del server: [%c]\n", buf_commands[0]);
+
       if(buf_commands[0]=='y'){
+
+        fprintf(stdout, "[MAIN] username accepted from server\n");
+        CONNECTED = 1;
+
+        user_buf[0] = 'x';
+
+        while(CONNECTED){
+
+          memset(user_buf+1, 0, MSG_LEN-1);
+
+          fprintf(stdout, "[CHAT]: ");
+          fgets(user_buf+1, MSG_LEN-1, stdin);
+
+          fprintf(stdout, "[CHAT_FLAG]: %s", user_buf);
+
+          send_msg(socket_desc, user_buf);
+
+          if(!strcmp(user_buf+1, "exit\n")){
+            fprintf(stdout, "[CHAT] exit message arrived....exiting chat\n");
+            CONNECTED = 0;
+            break;
+          }
+
+        }
 
         /*
         *
@@ -554,7 +589,7 @@ int main(int argc, char* argv[]){
       }
 
       else{
-        fprintf(stdout, "[MAIN] Incorrect username\n");
+        fprintf(stdout, "[MAIN] Incorrect username or server may be down\n");
       }
 
       continue; //nonn deve essere continue ma deve fare qualcosa per la chat
