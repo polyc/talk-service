@@ -409,7 +409,7 @@ int main(int argc, char* argv[]){
 
   int ret;
   CONNECTED = 0; // non sono connesso a nessuno per adesso
-  USERNAME_CHAT = calloc(USERNAME_BUF_SIZE, sizeof(char));
+  USERNAME_CHAT = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
 
   fprintf(stdout, "[MAIN] starting main process\n");
 
@@ -515,7 +515,9 @@ int main(int argc, char* argv[]){
     fprintf(stdout, "[MAIN] exit/connect to/list: ");
 
     fgets(buf_commands+1, MSG_LEN-1, stdin);
-    buf_commands = strtok(buf_commands, "\n");
+    buf_commands = strtok(buf_commands+1, "\n");
+
+    fprintf(stdout, "[MAIN] buf_commands = %s\n", buf_commands);
 
 
     if(CONNECTED){ //per inviare messaggi in chat
@@ -525,7 +527,7 @@ int main(int argc, char* argv[]){
       continue;
     }
 
-    if(list_command(buf_commands)==1){  //per la lista
+    if(list_command(buf_commands+1)==1){  //per la lista
       continue;
     }
 
@@ -535,7 +537,7 @@ int main(int argc, char* argv[]){
 
       memset(buf_commands, 0, MSG_LEN);
 
-      char* user_buf = calloc(MSG_LEN, sizeof(char));
+      char* user_buf = (char*)calloc(MSG_LEN, sizeof(char));
 
       user_buf[0] = CONNECTION_REQUEST;
 
