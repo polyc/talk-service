@@ -27,6 +27,7 @@ void* connection_handler(void* arg);
 void* sender_routine(void* arg);
 void get_and_check_username(int socket, char* username);
 void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command);
+void notify_all(char* message_buf);
 int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* element_to_update, char* target_buf, int* connected);
 void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_data);
 void update_availability(usr_list_elem_t* element_to_update, char* buf_command);
