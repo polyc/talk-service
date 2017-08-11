@@ -514,12 +514,12 @@ int main(int argc, char* argv[]){
 
     fprintf(stdout, "[MAIN] exit/connect to/list: ");
 
-    fgets(buf_commands, MSG_LEN, stdin);
+    fgets(buf_commands+1, MSG_LEN-1, stdin);
     buf_commands = strtok(buf_commands, "\n");
 
 
     if(CONNECTED){ //per inviare messaggi in chat
-      buf_commands = strcat(MESSAGE, buf_commands); //per il parsing per i messaggi
+      buf_commands[0] = MESSAGE; //per il parsing per i messaggi
       send_msg(socket_desc, buf_commands); //aggiungere \n al buffer
 
       continue;
@@ -537,9 +537,9 @@ int main(int argc, char* argv[]){
 
       char* user_buf = calloc(MSG_LEN, sizeof(char));
 
-      user_buf[0] = 'r';
+      user_buf[0] = CONNECTION_REQUEST;
 
-      fgets(user_buf+1, MSG_LEN, stdin);  //prende lo username
+      fgets(user_buf+1, MSG_LEN-1, stdin);  //prende lo username
 
       //sending chat username to server
       send_msg(socket_desc, user_buf);
@@ -556,7 +556,7 @@ int main(int argc, char* argv[]){
         fprintf(stdout, "[MAIN] username accepted from server\n");
         CONNECTED = 1;
 
-        user_buf[0] = 'x';
+        user_buf[0] = MESSAGE;
 
         while(CONNECTED){
 
