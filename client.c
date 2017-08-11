@@ -374,6 +374,8 @@ void* usr_list_recv_thread_routine(void* args){
         break;
       }
 
+      fprintf(stdout, "[READ_UPDATES] MESSAGES: %s\n", buf);
+
       size_t len = strlen(buf);
       char* queueBuf_elem = (char*)calloc(len, sizeof(char));
 
