@@ -11,7 +11,7 @@ typedef struct chat_session_args_s{
 }chat_session_args_t;
 
 typedef struct read_updates_args_s{
-  GAsyncQueue* buf_modifications;
+  GAsyncQueue* read_updates_mailbox;
   int server_socket;
 }read_updates_args_t;
 

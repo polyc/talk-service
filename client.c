@@ -236,8 +236,10 @@ void* read_updates(void* args){
 
   fprintf(stdout, "[READ_UPDATES] inside function read_updates\n");
 
-  GAsyncQueue* buf = (GAsyncQueue*)args.buf_modifications;
-  int socket_to_server = args.server_socket;
+  read_updates_args_t* arg = (read_updates_args_t*)args;
+
+  GAsyncQueue* buf = REF(arg->read_updates_mailbox);
+  int socket_to_server = (int)(arg->server_socket);
 
   while(1){
 
@@ -326,6 +328,7 @@ void* usr_list_recv_thread_routine(void* args){
 
   int ret;
 
+
   ret = prctl(PR_SET_PDEATHSIG, SIGINT);
   ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] error on prctl function");
 
@@ -336,7 +339,8 @@ void* usr_list_recv_thread_routine(void* args){
   //creating buffers to store modifications sent by server
   GAsyncQueue* mail_box = mailbox_queue_init();
 
-  args.buf_modifications = REF(mail_box);
+  GAsyncQueue* buf_modifications = REF(mail_box);
+  ((read_updates_args_t*) args)->read_updates_mailbox = mail_box;
 
   //creating thread to manage updates to user list
   pthread_t manage_updates;
@@ -487,7 +491,7 @@ int main(int argc, char* argv[]){
   //
   //creating and spawning user list receiver thread with parameters
   read_updates_args_t* thread_usrl_recv_args = (read_updates_args_t*)malloc(sizeof(read_updates_args_t));
-  thread_usrl_recv_args.server_socket = socket_desc;
+  thread_usrl_recv_args->server_socket = socket_desc;
 
   pthread_t thread_usrl_recv;
   ret = pthread_create(&thread_usrl_recv, NULL, usr_list_recv_thread_routine, (void*)thread_usrl_recv_args);
