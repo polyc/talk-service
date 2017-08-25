@@ -275,6 +275,8 @@ void* read_updates(void* args){
         USERNAME_CHAT[i] = elem_buf[i];
       }
 
+      memset(elem_buf+2, 0, MSG_LEN);
+
       fprintf(stdout, "[READ_UPDATES] Connection request from [%s] accept [y] refuse [n]: ", USERNAME_CHAT);
 
       while(1){
@@ -291,7 +293,13 @@ void* read_updates(void* args){
       if(elem_buf[1] == 'y'){
         CONNECTED = 1;
       }
-      elem_buf[strlen(elem_buf)] = '\0';
+
+      memcpy(elem_buf+2, USERNAME_CHAT, strlen(USERNAME_CHAT));
+
+      elem_buf[strlen(elem_buf)] = '\n';
+      elem_buf[strlen(elem_buf)+1] = '\0';
+
+      fprintf(stdout, "[READ_UPDATES] message response to server: %s\n", elem_buf);
 
       send_msg(socket_to_server, elem_buf);
 
