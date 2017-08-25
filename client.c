@@ -277,16 +277,25 @@ void* read_updates(void* args){
 
       fprintf(stdout, "[READ_UPDATES] Connection request from [%s] accept [y] refuse [n]: ", USERNAME_CHAT);
 
-      fgets(elem_buf+1, MSG_LEN-2, stdin);
-      elem_buf[0] = CONNECTION_RESPONSE;
+      while(1){
+        fgets(elem_buf+1, 2, stdin);
+        elem_buf[0] = CONNECTION_RESPONSE;
 
+        if(elem_buf[1] == 'y' || elem_buf[1] == 'n'){
+          memset(elem_buf+2, 0, MSG_LEN);
+          break;
+        }
+        memset(elem_buf+1, 0, MSG_LEN);
+
+      }
       if(elem_buf[1] == 'y'){
         CONNECTED = 1;
       }
-      elem_buf[strlen(elem_buf)] = '\n';
       elem_buf[strlen(elem_buf)] = '\0';
 
       send_msg(socket_to_server, elem_buf);
+
+      continue;
 
     }
 
@@ -400,7 +409,7 @@ void* usr_list_recv_thread_routine(void* args){
         break;
       }
 
-      fprintf(stdout, "[READ_UPDATES] MESSAGES: %s\n", buf);
+      fprintf(stdout, "[RECV_THREAD_ROUTINE] MESSAGES: %s\n", buf);
 
       size_t len = strlen(buf);
       char* queueBuf_elem = (char*)calloc(len, sizeof(char));
