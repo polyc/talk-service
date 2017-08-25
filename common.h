@@ -36,7 +36,7 @@
 #define QUIT                   'q'
 #define MESSAGE                'x'
 #define CONNECTION_REQUEST     'r' //client wants to chat with someone
-#define CONNECTION_RESPONSE    's'
+#define CONNECTION_RESPONSE    's' //client's response to server, usually resended to another client
 
 #define GENERIC_ERROR_HELPER(cond, errCode, msg) do {             \
         if (cond) {                                               \
