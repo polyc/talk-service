@@ -10,6 +10,11 @@ typedef struct chat_session_args_s{
   pthread_t* thread_id;
 }chat_session_args_t;
 
+typedef struct read_updates_args_s{
+  GAsyncQueue* buf_modifications;
+  int server_socket;
+}read_updates_args_t;
+
 #define MSG_LEN 256
 #define MAIN_CMD_LEN 9
 

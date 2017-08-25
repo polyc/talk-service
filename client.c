@@ -236,7 +236,8 @@ void* read_updates(void* args){
 
   fprintf(stdout, "[READ_UPDATES] inside function read_updates\n");
 
-  GAsyncQueue* buf = (GAsyncQueue*)args;
+  GAsyncQueue* buf = (GAsyncQueue*)args.buf_modifications;
+  int socket_to_server = args.server_socket;
 
   while(1){
 
@@ -258,12 +259,33 @@ void* read_updates(void* args){
 
       if(!strcmp(elem_buf+1,"exit")){
         CONNECTED = 0;
+        memset(USERNAME_CHAT, 0, USERNAME_BUF_SIZE);
         continue;
       }
 
       fprintf(stdout, "[Receiving chat] %s\n", elem_buf+1);
       free(elem_buf);
       continue;
+    }
+
+    else if(elem_buf[0] == CONNECTION_REQUEST){
+      for(int i=1; i<USERNAME_BUF_SIZE && elem_buf[i] != '\0'; i++){
+        USERNAME_CHAT[i] = elem_buf[i];
+      }
+
+      fprintf(stdout, "[READ_UPDATES] Connection request from [%s] accept [y] refuse [n]: ", USERNAME_CHAT);
+
+      fgets(elem_buf+1, MSG_LEN-2, stdin);
+      elem_buf[0] = CONNECTION_RESPONSE;
+
+      if(elem_buf[1] == 'y'){
+        CONNECTED = 1;
+      }
+      elem_buf[strlen(elem_buf)] = '\n';
+      elem_buf[strlen(elem_buf)] = '\0';
+
+      send_msg(socket_to_server, elem_buf);
+
     }
 
 
@@ -314,11 +336,11 @@ void* usr_list_recv_thread_routine(void* args){
   //creating buffers to store modifications sent by server
   GAsyncQueue* mail_box = mailbox_queue_init();
 
-  GAsyncQueue* buf_modifications = REF(mail_box);
+  args.buf_modifications = REF(mail_box);
 
   //creating thread to manage updates to user list
   pthread_t manage_updates;
-  ret = pthread_create(&manage_updates, NULL, read_updates, (void*)buf_modifications);
+  ret = pthread_create(&manage_updates, NULL, read_updates, (void*)args);
   PTHREAD_ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] Unable to create manage_updates thread");
 
   //address structure for user list sender thread
@@ -464,8 +486,11 @@ int main(int argc, char* argv[]){
   //user list receiver thread
   //
   //creating and spawning user list receiver thread with parameters
+  read_updates_args_t* thread_usrl_recv_args = (read_updates_args_t*)malloc(sizeof(read_updates_args_t));
+  thread_usrl_recv_args.server_socket = socket_desc;
+
   pthread_t thread_usrl_recv;
-  ret = pthread_create(&thread_usrl_recv, NULL, usr_list_recv_thread_routine, NULL);
+  ret = pthread_create(&thread_usrl_recv, NULL, usr_list_recv_thread_routine, (void*)thread_usrl_recv_args);
   PTHREAD_ERROR_HELPER(ret, "[MAIN] Unable to create user list receiver thread");
 
   fprintf(stdout, "[MAIN] waiting for usrl_listen_thread_routine to bind address\n");
@@ -555,7 +580,7 @@ int main(int argc, char* argv[]){
 
       fprintf(stdout, "[MAIN]risposta del server: [%c]\n", buf_commands[0]);
 
-      if(buf_commands[0]=='y'){
+      if(buf_commands[0] == CONNECTION_RESPONSE && buf_commands[1]=='y'){
 
         fprintf(stdout, "[MAIN] username accepted from server\n");
         CONNECTED = 1;
@@ -593,7 +618,7 @@ int main(int argc, char* argv[]){
       }
 
       else{
-        fprintf(stdout, "[MAIN] Incorrect username or server may be down\n");
+        fprintf(stdout, "[MAIN] Incorrect username, server may be down or connection refused\n");
       }
 
       continue; //nonn deve essere continue ma deve fare qualcosa per la chat

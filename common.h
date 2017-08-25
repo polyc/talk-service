@@ -27,15 +27,16 @@
 #define UNLOCK g_async_queue_unlock
 
 //server commands macros
-#define AVAILABLE   'a'
-#define UNAVAILABLE 'u'
-#define DISCONNECT  'c' //disconnecting from server
-#define NEW         'n'
-#define MODIFY      'm'
-#define DELETE      'd'
-#define QUIT        'q'
-#define MESSAGE     'x'
+#define AVAILABLE              'a'
+#define UNAVAILABLE            'u'
+#define DISCONNECT             'c' //disconnecting from server
+#define NEW                    'n'
+#define MODIFY                 'm'
+#define DELETE                 'd'
+#define QUIT                   'q'
+#define MESSAGE                'x'
 #define CONNECTION_REQUEST     'r' //client wants to chat with someone
+#define CONNECTION_RESPONSE    's'
 
 #define GENERIC_ERROR_HELPER(cond, errCode, msg) do {             \
         if (cond) {                                               \
