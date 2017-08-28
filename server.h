@@ -29,7 +29,7 @@ void get_and_check_username(int socket, char* username);
 void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command);
 void push_all(char* message_buf);
 void notify(char* message_buf, thread_args_t* args, char* mod_command, usr_list_elem_t* element_to_update);
-int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* element_to_update, char* target_buf, int* connected);
+int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* element_to_update, char* target_buf);
 void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_data);
 void update_availability(usr_list_elem_t* element_to_update, char* buf_command);
 void remove_entry(char* elem_to_remove, char* mailbox_to_remove);

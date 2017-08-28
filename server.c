@@ -85,7 +85,7 @@ void get_and_check_username(int socket, char* username){
       memset(send_buf, 0, 2);
     }
   }
-  fprintf(stdout, "[MAIN]: username getted\n");
+  fprintf(stdout, "[CONNECTION THREAD]: username getted\n");
   return;
 }
 
@@ -104,32 +104,37 @@ void update_availability(usr_list_elem_t* elem_to_update, char* buf_command){
 
 //remove entries from hash tables when a client disconnects from server
 void remove_entry(char* elem_to_remove, char* mailbox_to_remove){
+
   //removing from userlist
-  gint ret = sem_wait(&user_list_mutex);
+  gboolean removed;
+
+  int ret = sem_wait(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: could not wait on user_list_mutex_list semaphore");
 
-  ret = REMOVE(user_list, elem_to_remove); //remove entry
-  if(ret == FALSE){
-    ERROR_HELPER(-1, "[CONNECTION THREAD][REMOVING ENTRY]: remove entry failed");
-  }
+  removed = REMOVE(user_list, elem_to_remove); //remove entry
+  fprintf(stdout, "%d\n", removed);
 
   ret = sem_post(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: could not post on user_list_mutex_list semaphore");
+
+  //if(removed == 0)
+    //ERROR_HELPER(-1, "[CONNECTION THREAD][REMOVING ENTRY]: remove entry failed");
+
 
   //removing from mailboxlist
   ret = sem_wait(&mailbox_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: could not wait on mailbox_list_mutex semaphore");
 
-  ret = REMOVE(mailbox_list, mailbox_to_remove);
+  removed = REMOVE(mailbox_list, mailbox_to_remove);
 
   ret = sem_post(&mailbox_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: could not post on mailbox_list_mutex semaphore");
 
-  if(ret == FALSE){
-    ERROR_HELPER(-1, "[CONNECTION THREAD][REMOVING ENTRY]: remove entry failed");
-  }
+  //if(removed == 0)
+    //ERROR_HELPER(-1, "[CONNECTION THREAD][REMOVING ENTRY]: remove entry failed");
 
-  fprintf(stdout, "[CONNECTION THREAD] successfully removed entry on disconnect operation\n");
+
+  fprintf(stdout, "[CONNECTION THREAD]: successfully removed entry on disconnect operation\n");
   return;
 }
 
@@ -181,7 +186,7 @@ void notify(char* message_buf, thread_args_t* args, char* mod_command, usr_list_
   push_all(message_buf);
 }
 
-int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* element_to_update, char* target_buf, int* connected){
+int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* element_to_update, char* target_buf){
 
   int ret = 0;
 
@@ -202,7 +207,7 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
 
       if(connection_accepted(message_buf)){
         update_availability(element_to_update, "u");//set this client UNAVAILABLE
-        notify(message_buf, args, &mod_command, element_to_update);
+        notify(message_buf, args, &mod_command, element_to_update); //alerts all connected clients
 
         return ret;
       }
@@ -237,10 +242,6 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
       usr_list_elem_t* target = (usr_list_elem_t*)LOOKUP(user_list, target_buf);
 
       if(target != NULL && target->a_flag == AVAILABLE){ //if true, begins operation necessary to "install a comm channel" betweeen the two clients
-        message_buf[0] = CONNECTION_RESPONSE;
-        message_buf[1] = 'y';
-        message_buf[2] = '\n';
-        send_msg(args->socket, message_buf); //send "yes" to this client
 
         ret = sem_post(&user_list_mutex);
         ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
@@ -252,7 +253,7 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
         //send request to target client
         memset(message_buf, 0, MSG_LEN);
         message_buf[0] = CONNECTION_REQUEST;
-        strcpy(target_buf, message_buf + 1);
+        strcpy(message_buf + 1, target_buf);
         message_buf[strlen(message_buf)] = '\n';
         message_buf[strlen(message_buf)+1] = '\0';
 
@@ -274,13 +275,15 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
         return 0;
       }
       else{
+
+        ret = sem_post(&user_list_mutex);
+        ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
+
         message_buf[0] = CONNECTION_RESPONSE;
         message_buf[1] = 'n';
         message_buf[2] = '\n';
         send_msg(args->socket, message_buf); //send "no" to this client
 
-        ret = sem_post(&user_list_mutex);
-        ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
         return 0;
       }
 
@@ -304,36 +307,22 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
 
       push_entry(NULL, target_mailbox, message_buf); //push message in target mailbox
 
-      if(!strcmp(message_buf + 1, "exit")) *connected = 0; //not final
+      //if(!strcmp(message_buf + 1, "exit")) *connected = 0; //not final
       return 0;
-
-    case UNAVAILABLE :
-      mod_command = MODIFY;
-      update_availability(element_to_update, &message_type);
-      notify(message_buf, args, &mod_command, element_to_update);
-
-      fprintf(stdout, "[CONNECTION THREAD]: unavailable command processed\n");
-      return ret;
-
-    case AVAILABLE :
-      mod_command = MODIFY;
-      update_availability(element_to_update, &message_type);
-      notify(message_buf, args, &mod_command, element_to_update);
-
-      fprintf(stdout, "[CONNECTION THREAD]: available command procesed\n");
-      return ret;
 
     case DISCONNECT:
       mod_command = DELETE;
-      remove_entry(args->client_user_name, args->mailbox_key);
+      //update for other senders
+      notify(message_buf, args, &mod_command, element_to_update);
 
       //notify sender thread the termination condition
       GAsyncQueue* mailbox = (GAsyncQueue*)LOOKUP(mailbox_list, args->mailbox_key);
       message_buf = "exit";
       PUSH(mailbox, (gpointer)message_buf);
 
-      //update for other senders
-      notify(message_buf, args, &mod_command, element_to_update);
+      //delete entry from hastables
+      remove_entry(args->client_user_name, args->mailbox_key);
+
 
       fprintf(stdout, "[CONNECTION THREAD]: disconnect command processed\n");
       return -1;
@@ -392,7 +381,6 @@ void* connection_handler(void* arg){
   thread_args_t* args = (thread_args_t*)arg;
 
   int ret;
-  int connected = 0; // connected == 1 : this client is "connected" to a different client
 
   //get username
   get_and_check_username(args->socket, args->client_user_name);
@@ -452,10 +440,22 @@ void* connection_handler(void* arg){
   //RECEIVING COMMANDS
   while(1){
     int ret = recv_msg(args->socket, message_buf, MSG_LEN);
-    ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot receive server command from client");
 
-    ret = execute_command(args, message_buf, element, target_useraname_buf, &connected);
-    if (ret < 0) break; //exit condition
+    if(ret < 0){ //socket is cloesed by client
+      fprintf(stdout, "[CONNECTION THREAD]: closed endpoint\n");
+      message_buf[0] = DISCONNECT;
+      ret = execute_command(args, message_buf, element, target_useraname_buf);
+      break;
+    }
+    //ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot receive server command from client");
+
+    fprintf(stdout, "before exc:%d\n", ret);
+
+    ret = execute_command(args, message_buf, element, target_useraname_buf);
+    fprintf(stdout, "after exc:%d\n", ret);
+    if (ret < 0){
+      break; //exit condition
+    }
   }
 
   //close operations
