@@ -25,7 +25,7 @@ typedef struct sender_thread_args_s{
 
 void* connection_handler(void* arg);
 void* sender_routine(void* arg);
-void get_and_check_username(int socket, char* username);
+int get_and_check_username(int socket, char* username);
 void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command);
 void push_all(char* message_buf);
 void notify(char* message_buf, thread_args_t* args, char* mod_command, usr_list_elem_t* element_to_update);

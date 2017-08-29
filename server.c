@@ -55,10 +55,14 @@ int connection_accepted(char* response){
 }
 
 //receive username from client and check if it's already used by another connected client
-void get_and_check_username(int socket, char* username){
+int get_and_check_username(int socket, char* username){
   char* send_buf = (char*)calloc(2, sizeof(char)); //buffer used to send response to client
   while(1){
+
     int ret = recv_msg(socket, username, USERNAME_BUF_SIZE);
+    if(ret == -1){
+      return -1; //endpoint closed by client
+    }
     ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot receive username");
 
     ret = sem_wait(&user_list_mutex);
@@ -86,7 +90,7 @@ void get_and_check_username(int socket, char* username){
     }
   }
   fprintf(stdout, "[CONNECTION THREAD]: username getted\n");
-  return;
+  return 0;
 }
 
 void update_availability(usr_list_elem_t* elem_to_update, char* buf_command){
@@ -177,6 +181,7 @@ void push_all(char* message_buf){
   ERROR_HELPER(err, "[CONNECTION THREAD]: cannot post on mailbox_list_mutex");
 }
 
+//notify all clients
 void notify(char* message_buf, thread_args_t* args, char* mod_command, usr_list_elem_t* element_to_update){
   //generating message
   memset(message_buf, 0, MSG_LEN);
@@ -382,8 +387,34 @@ void* connection_handler(void* arg){
 
   int ret;
 
+  //command receiver buffer
+  char* message_buf = (char*)calloc(MSG_LEN, sizeof(char));
+
+  char* target_useraname_buf = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
+
   //get username
-  get_and_check_username(args->socket, args->client_user_name);
+  ret = get_and_check_username(args->socket, args->client_user_name);
+
+  if(ret == -1){ //client close endpoint
+    fprintf(stdout, "[CONNECTION THREAD]: closed endpoint\n");
+    message_buf[0] = DISCONNECT;
+    ret = execute_command(args, message_buf, NULL, NULL);
+
+    //close operations
+    free(target_useraname_buf);
+
+    ret = close(args->socket);
+
+    free(args->client_ip);
+    free(args->client_user_name);
+
+    ret = sem_destroy(args->chandler_sync);
+    ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot destroy chandler_sync semaphore");
+
+    free(args);
+
+    pthread_exit(EXIT_SUCCESS);
+  }
 
   fprintf(stderr, "[CONNECTION THREAD %d]: allocazione user element da inserire nella lista\n", args->id);
 
@@ -431,12 +462,6 @@ void* connection_handler(void* arg){
   ret = sem_post(&mailbox_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
 
-
-  //command receiver buffer
-  char* message_buf = (char*)calloc(MSG_LEN, sizeof(char));
-
-  char* target_useraname_buf = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
-
   //RECEIVING COMMANDS
   while(1){
     int ret = recv_msg(args->socket, message_buf, MSG_LEN);
@@ -459,7 +484,6 @@ void* connection_handler(void* arg){
   }
 
   //close operations
-  free(message_buf);
   free(target_useraname_buf);
 
   ret = close(args->socket);
