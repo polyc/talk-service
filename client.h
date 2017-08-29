@@ -31,4 +31,5 @@ void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName,
 int get_username(char* username, int socket);
 int chat_session(char* username, int socket);
 void main_interrupt_handler(int dummy);
+void list_command();
 GHashTable* usr_list_init();

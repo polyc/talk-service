@@ -20,11 +20,11 @@
 
 sem_t sync_receiver;
 sem_t sync_userList;
-sem_t sync_chat;
 GHashTable* user_list;
 
 char* USERNAME;
 char* USERNAME_CHAT;
+char* buf_commands;
 char* available;
 char* unavailable;
 char* disconnect;
@@ -57,22 +57,18 @@ static void print_userList(gpointer key, gpointer elem, gpointer data){
   return;
 }
 
-int list_command(char* command){
+void list_command(){
+
   int ret;
 
-  if(strcmp("list", command)==0){
+  ret = sem_wait(&sync_userList);
+  ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in wait function on sync_userList semaphore\n");
 
-    ret = sem_wait(&sync_userList);
-    ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in wait function on sync_userList semaphore\n");
+  FOR_EACH(user_list, (GHFunc)print_userList, NULL); //printing hashtable
 
-    FOR_EACH(user_list, (GHFunc)print_userList, NULL); //printing hashtable
+  ret = sem_post(&sync_userList);
+  ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in post function on sync_userList semaphore\n");
 
-    ret = sem_post(&sync_userList);
-    ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in post function on sync_userList semaphore\n");
-
-    return 1;
-  }
-  return 0;
 }
 
 int get_username(char* username, int socket){
@@ -257,6 +253,8 @@ void* read_updates(void* args){
 
     fprintf(stdout, "[READ_UPDATES] Elem buff: %s\n", elem_buf);
 
+    fprintf(stdout, "[READ_UPDATES] Connection request");
+
     if(elem_buf[0]==MESSAGE){
 
       if(!strcmp(elem_buf+1,"exit")){
@@ -270,38 +268,16 @@ void* read_updates(void* args){
       continue;
     }
 
-    else if(elem_buf[0] == CONNECTION_REQUEST){
-      for(int i=1; i<USERNAME_BUF_SIZE && elem_buf[i] != '\0'; i++){
-        USERNAME_CHAT[i] = elem_buf[i];
-      }
 
-      memset(elem_buf+2, 0, MSG_LEN);
+    else if(elem_buf[0] == CONNECTION_REQUEST){
+
+      buf_commands[0] = CONNECTION_RESPONSE;
+
+      strcpy(USERNAME_CHAT, elem_buf+1);
 
       fprintf(stdout, "[READ_UPDATES] Connection request from [%s] accept [y] refuse [n]: ", USERNAME_CHAT);
 
-      while(1){
-        fgets(elem_buf+1, 2, stdin);
-        elem_buf[0] = CONNECTION_RESPONSE;
-
-        if(elem_buf[1] == 'y' || elem_buf[1] == 'n'){
-          memset(elem_buf+2, 0, MSG_LEN);
-          break;
-        }
-        memset(elem_buf+1, 0, MSG_LEN);
-
-      }
-      if(elem_buf[1] == 'y'){
-        CONNECTED = 1;
-      }
-
-      memcpy(elem_buf+2, USERNAME_CHAT, strlen(USERNAME_CHAT));
-
-      elem_buf[strlen(elem_buf)] = '\n';
-      elem_buf[strlen(elem_buf)+1] = '\0';
-
-      fprintf(stdout, "[READ_UPDATES] message response to server: %s\n", elem_buf);
-
-      send_msg(socket_to_server, elem_buf);
+      memset(elem_buf, 0, sizeof(elem_buf));
 
       continue;
 
@@ -420,9 +396,9 @@ void* usr_list_recv_thread_routine(void* args){
       fprintf(stdout, "[RECV_THREAD_ROUTINE] MESSAGES: %s\n", buf);
 
       size_t len = strlen(buf);
-      char* queueBuf_elem = (char*)calloc(len, sizeof(char));
+      char* queueBuf_elem = (char*)calloc(len+1, sizeof(char));
 
-      memcpy(queueBuf_elem, buf, len);
+      strcpy(queueBuf_elem, buf); //for \0 in the char*
 
       g_async_queue_push(buf_modifications, (gpointer)queueBuf_elem);
 
@@ -484,11 +460,6 @@ int main(int argc, char* argv[]){
   ret = sem_init(&sync_userList, 0, 1);
   ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_userList semaphore");
 
-  //creating sempahore for syncronization between connect_routine and listen_routine
-  // ****non serve piu perche ci sara una sola routine****
-  ret = sem_init(&sync_chat, 0, 0);
-  ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_chat");
-
   fprintf(stdout, "[MAIN] semaphores initialized correctly\n");
 
   //socket descriptor to connect to server
@@ -547,43 +518,42 @@ int main(int argc, char* argv[]){
 
   USERNAME = strtok(USERNAME, "\n");
 
-
   fprintf(stdout, "[MAIN] got username: [%s]\n", USERNAME);
 
-  char* buf_commands = (char*)calloc(MSG_LEN, sizeof(char));
+  buf_commands = (char*)calloc(MSG_LEN, sizeof(char));
+  buf_commands[0] = '-';
 
   while(1){
-
-    //creating sempahore for syncronization between connect_routine and listen_routine
-    ret = sem_init(&sync_chat, 0, 0);
-    ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_chat");
 
     memset(buf_commands, 0, MSG_LEN);
 
     fprintf(stdout, "[MAIN] exit/connect to/list: ");
 
     fgets(buf_commands+1, MSG_LEN-1, stdin);
-    buf_commands = strtok(buf_commands+1, "\n");
+    //buf_commands = strtok(buf_commands, "\n");
 
     fprintf(stdout, "[MAIN] buf_commands = %s\n", buf_commands);
 
 
     if(CONNECTED){ //per inviare messaggi in chat
       buf_commands[0] = MESSAGE; //per il parsing per i messaggi
+
+      //aggiungere il controllo per exit!!
+
       send_msg(socket_desc, buf_commands); //aggiungere \n al buffer
-
+      //memset(buf_commands, 0, MSG_LEN);
       continue;
     }
 
-    if(list_command(buf_commands+1)==1){  //per la lista
+    else if(strcmp(buf_commands+1, "list\n")==0){  //per la lista
+      list_command();
+      //memset(buf_commands, 0, MSG_LEN);
       continue;
     }
 
-    else if(strcmp(buf_commands, "connect")==0){ //per chattare
+    else if(strcmp(buf_commands+1, "connect\n")==0){ //per chattare
 
       fprintf(stdout, "[MAIN] passato il connect\n");
-
-      memset(buf_commands, 0, MSG_LEN);
 
       char* user_buf = (char*)calloc(MSG_LEN, sizeof(char));
 
@@ -627,25 +597,58 @@ int main(int argc, char* argv[]){
 
         }
 
-        /*
-        *
-        *
-        *  aspettare e fare qualcosa con la connessione
-        *  connected = 1 RICORDA!!
-        *
-        *
-        */
-
       }
 
       else{
         fprintf(stdout, "[MAIN] Incorrect username, server may be down or connection refused\n");
       }
 
+      //memset(buf_commands, 0, MSG_LEN);
       continue; //nonn deve essere continue ma deve fare qualcosa per la chat
     }
 
-    else if(strcmp(buf_commands, "exit")==0){ //per uscire dal programma
+    else if(buf_commands[0] == CONNECTION_RESPONSE){
+                                                              //controlla bene anche questo per errori nel buffer
+      if((buf_commands[1] != 'y' && buf_commands[1] != 'n') /* && strlen(buf_commands)>2 */ ){
+
+        memset(buf_commands+1, 0, MSG_LEN);
+
+        while(1){
+
+          fgets(buf_commands+1, 2, stdin);
+
+          if((buf_commands[1] != 'y' && buf_commands[1] != 'n') /* && strlen(buf_commands)>2 */ ){
+              memset(buf_commands+1, 0, MSG_LEN);
+            continue;
+          }
+
+          break;
+        }
+      }
+
+      else if(buf_commands[1] == 'y'){
+
+        CONNECTED = 1;
+
+        strcpy(buf_commands+2, USERNAME_CHAT);
+
+        buf_commands[strlen(buf_commands)] = '\n';
+        buf_commands[strlen(buf_commands)+1] = '\0';
+
+        fprintf(stdout, "[READ_UPDATES] message response to server: %s\n", buf_commands);
+
+        send_msg(socket_desc, buf_commands);
+      }
+
+      else{
+        CONNECTED = 0;
+      }
+
+    //memset(buf_commands, 0, MSG_LEN);
+    continue;
+    }
+
+    else if(strcmp(buf_commands+1, "exit\n")==0){ //per uscire dal programma
       break;
     }
 
@@ -659,12 +662,10 @@ int main(int argc, char* argv[]){
   ret = sem_destroy(&sync_userList);
   ERROR_HELPER(ret, "[MAIN] Error destroying &sync_userList semaphore");
 
-  ret = sem_destroy(&sync_chat);
-  ERROR_HELPER(ret, "[MAIN] Error destroying &sync_chat semaphore");
-
   fprintf(stdout, "[MAIN] freeing allocated data...\n");
 
   free(USERNAME);
+  free(USERNAME_CHAT);
   free(buf_commands);
   free(available);
   free(unavailable);
