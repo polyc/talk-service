@@ -253,7 +253,7 @@ void* read_updates(void* args){
 
     fprintf(stdout, "[READ_UPDATES] Elem buff: %s\n", elem_buf);
 
-    fprintf(stdout, "[READ_UPDATES] Connection request");
+    //fprintf(stdout, "[READ_UPDATES] Connection request");
 
     if(elem_buf[0]==MESSAGE){
 
@@ -277,14 +277,37 @@ void* read_updates(void* args){
 
       fprintf(stdout, "[READ_UPDATES] Connection request from [%s] accept [y] refuse [n]: ", USERNAME_CHAT);
 
-      memset(elem_buf, 0, sizeof(elem_buf));
+      free(elem_buf);
 
       continue;
 
     }
 
+    else if(elem_buf[0] == CONNECTION_RESPONSE){
 
-    //tutto questo va fatto solo se NON e' un messaggio
+      if(elem_buf[1] == 'y'){
+
+        strcpy(USERNAME_CHAT, elem_buf+2);
+
+        fprintf(stdout, "[READ_UPDATES] Response form server is YES! You are now chatting with: %s\n", USERNAME_CHAT);
+
+        CONNECTED = 1;
+        buf_commands[0] = MESSAGE;
+
+      }
+
+      else{
+        fprintf(stdout, "[READ_UPDATES] Response form server is NO! :(\n");
+        CONNECTED = 0;
+      }
+
+      free(elem_buf);
+      continue;
+
+    }
+
+
+    //tutto questo va fatto solo se NON e' un messaggio un connection response o request
 
     fprintf(stdout, "[READ_UPDATES] poped element from queue\n");
 
@@ -523,6 +546,8 @@ int main(int argc, char* argv[]){
   buf_commands = (char*)calloc(MSG_LEN, sizeof(char));
   buf_commands[0] = '-';
 
+  char* user_buf = (char*)calloc(MSG_LEN, sizeof(char));
+
   while(1){
 
     memset(buf_commands, 0, MSG_LEN);
@@ -535,7 +560,7 @@ int main(int argc, char* argv[]){
     fprintf(stdout, "[MAIN] buf_commands = %s\n", buf_commands);
 
 
-    if(CONNECTED){ //per inviare messaggi in chat
+    if(CONNECTED==1){ //per inviare messaggi in chat
       buf_commands[0] = MESSAGE; //per il parsing per i messaggi
 
       //aggiungere il controllo per exit!!
@@ -555,8 +580,6 @@ int main(int argc, char* argv[]){
 
       fprintf(stdout, "[MAIN] passato il connect\n");
 
-      char* user_buf = (char*)calloc(MSG_LEN, sizeof(char));
-
       user_buf[0] = CONNECTION_REQUEST;
 
       fgets(user_buf+1, MSG_LEN-1, stdin);  //prende lo username
@@ -567,85 +590,7 @@ int main(int argc, char* argv[]){
       memset(buf_commands, 0, MSG_LEN);
       memset(user_buf, 0, MSG_LEN);
 
-      ret = recv_msg(socket_desc, buf_commands,2);
-
-      fprintf(stdout, "[MAIN]risposta del server: [%c]\n", buf_commands[0]);
-
-      if(buf_commands[0] == CONNECTION_RESPONSE && buf_commands[1]=='y'){
-
-        fprintf(stdout, "[MAIN] username accepted from server\n");
-        CONNECTED = 1;
-
-        user_buf[0] = MESSAGE;
-
-        while(CONNECTED){
-
-          memset(user_buf+1, 0, MSG_LEN-1);
-
-          fprintf(stdout, "[CHAT]: ");
-          fgets(user_buf+1, MSG_LEN-1, stdin);
-
-          fprintf(stdout, "[CHAT_FLAG]: %s", user_buf);
-
-          send_msg(socket_desc, user_buf);
-
-          if(!strcmp(user_buf+1, "exit\n")){
-            fprintf(stdout, "[CHAT] exit message arrived....exiting chat\n");
-            CONNECTED = 0;
-            break;
-          }
-
-        }
-
-      }
-
-      else{
-        fprintf(stdout, "[MAIN] Incorrect username, server may be down or connection refused\n");
-      }
-
-      //memset(buf_commands, 0, MSG_LEN);
       continue; //nonn deve essere continue ma deve fare qualcosa per la chat
-    }
-
-    else if(buf_commands[0] == CONNECTION_RESPONSE){
-                                                              //controlla bene anche questo per errori nel buffer
-      if((buf_commands[1] != 'y' && buf_commands[1] != 'n') /* && strlen(buf_commands)>2 */ ){
-
-        memset(buf_commands+1, 0, MSG_LEN);
-
-        while(1){
-
-          fgets(buf_commands+1, 2, stdin);
-
-          if((buf_commands[1] != 'y' && buf_commands[1] != 'n') /* && strlen(buf_commands)>2 */ ){
-              memset(buf_commands+1, 0, MSG_LEN);
-            continue;
-          }
-
-          break;
-        }
-      }
-
-      else if(buf_commands[1] == 'y'){
-
-        CONNECTED = 1;
-
-        strcpy(buf_commands+2, USERNAME_CHAT);
-
-        buf_commands[strlen(buf_commands)] = '\n';
-        buf_commands[strlen(buf_commands)+1] = '\0';
-
-        fprintf(stdout, "[READ_UPDATES] message response to server: %s\n", buf_commands);
-
-        send_msg(socket_desc, buf_commands);
-      }
-
-      else{
-        CONNECTED = 0;
-      }
-
-    //memset(buf_commands, 0, MSG_LEN);
-    continue;
     }
 
     else if(strcmp(buf_commands+1, "exit\n")==0){ //per uscire dal programma
