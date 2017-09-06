@@ -550,12 +550,9 @@ int main(int argc, char* argv[]){
 
   while(1){
 
-    memset(buf_commands, 0, MSG_LEN);
-
     fprintf(stdout, "[MAIN] exit/connect to/list: ");
 
     fgets(buf_commands+1, MSG_LEN-1, stdin);
-    //buf_commands = strtok(buf_commands, "\n");
 
     fprintf(stdout, "[MAIN] buf_commands = %s\n", buf_commands);
 
@@ -566,13 +563,13 @@ int main(int argc, char* argv[]){
       //aggiungere il controllo per exit!!
 
       send_msg(socket_desc, buf_commands); //aggiungere \n al buffer
-      //memset(buf_commands, 0, MSG_LEN);
+      memset(buf_commands, 0, MSG_LEN);
       continue;
     }
 
     else if(strcmp(buf_commands+1, "list\n")==0){  //per la lista
       list_command();
-      //memset(buf_commands, 0, MSG_LEN);
+      memset(buf_commands, 0, MSG_LEN);
       continue;
     }
 
@@ -591,6 +588,35 @@ int main(int argc, char* argv[]){
       memset(user_buf, 0, MSG_LEN);
 
       continue; //nonn deve essere continue ma deve fare qualcosa per la chat
+    }
+
+    else if(buf_commands[0] == CONNECTION_RESPONSE){
+
+      if(((buf_commands[1]=='y' || buf_commands[1]=='n') && strlen(buf_commands)==3)){
+
+        if(buf_commands[1] == 'y'){
+          CONNECTED = 1;
+        }
+        else{
+          CONNECTED = 0;
+        }
+
+        strcpy(buf_commands+2, USERNAME_CHAT);
+        buf_commands[strlen(buf_commands)] = '\n';
+        buf_commands[strlen(buf_commands)+1] = '\0';
+
+        send_msg(socket_desc, buf_commands);
+
+        memset(buf_commands, 0, MSG_LEN);
+        continue;
+      }
+
+      else{
+        fprintf(stdout, "[MAIN] Wrong input for connetion response\n");
+        memset(buf_commands+1, 0, MSG_LEN);
+        continue;
+      }
+
     }
 
     else if(strcmp(buf_commands+1, "exit\n")==0){ //per uscire dal programma
