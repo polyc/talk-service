@@ -38,8 +38,8 @@ char* parse_username(char* src, char* dest, char message_type){
   }
   else if(message_type == CONNECTION_RESPONSE){
     for (i = 2; i < len; i++) {
-      dest[i - 1] = src[i];
-      printf("[parse] %d, %c\n", i, dest[i-1]);
+      dest[i - 2] = src[i];
+      printf("[parse] %d, %c\n", i, dest[i-2]);
     }
     dest[len-1] = '\0';
     return dest;
@@ -157,7 +157,7 @@ void push_entry(gpointer key, gpointer value, gpointer user_data){
 }
 
 //sender retrieve message from its queue
-void pop_entry(){}
+//void pop_entry(){}
 
 //function called by FOR_EACH. It sends userlist on connection to receiver thread in client
 void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_data){
@@ -246,7 +246,7 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
 
       usr_list_elem_t* target = (usr_list_elem_t*)LOOKUP(user_list, target_buf);
 
-      if(target != NULL && target->a_flag == AVAILABLE){ //if true, begins operation necessary to "install a comm channel" betweeen the two clients
+      if(target != NULL && target->a_flag == AVAILABLE){ //if true, send CONNECTION_REQUEST to target
 
         ret = sem_post(&user_list_mutex);
         ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
@@ -258,7 +258,7 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
         //send request to target client
         memset(message_buf, 0, MSG_LEN);
         message_buf[0] = CONNECTION_REQUEST;
-        strcpy(message_buf + 1, target_buf);
+        strcpy(message_buf + 1, args->client_user_name);
         message_buf[strlen(message_buf)] = '\n';
         message_buf[strlen(message_buf)+1] = '\0';
 
@@ -312,7 +312,11 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
 
       push_entry(NULL, target_mailbox, message_buf); //push message in target mailbox
 
-      //if(!strcmp(message_buf + 1, "exit")) *connected = 0; //not final
+      if(strcmp(message_buf + 1, "exit") != 0){
+        update_availability(element_to_update, "a"); //set this client available
+        notify(message_buf, args, &mod_command, element_to_update);
+      } //not final
+
       return 0;
 
     case DISCONNECT:
