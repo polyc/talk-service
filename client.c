@@ -240,7 +240,7 @@ void* read_updates(void* args){
   while(1){
 
     char* elem_buf;
-    fprintf(stdout, "[READ_UPDATES] inside while(1)\n");
+    //fprintf(stdout, "[READ_UPDATES] inside while(1)\n");
 
     while(1){
 
@@ -251,7 +251,7 @@ void* read_updates(void* args){
       }
     }
 
-    fprintf(stdout, "[READ_UPDATES] Elem buff: %s\n", elem_buf);
+    //fprintf(stdout, "[READ_UPDATES] Elem buff: %s\n", elem_buf);
 
     //fprintf(stdout, "[READ_UPDATES] Connection request");
 
@@ -344,7 +344,6 @@ void* usr_list_recv_thread_routine(void* args){
 
   int ret;
 
-
   ret = prctl(PR_SET_PDEATHSIG, SIGINT);
   ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] error on prctl function");
 
@@ -416,7 +415,7 @@ void* usr_list_recv_thread_routine(void* args){
         break;
       }
 
-      fprintf(stdout, "[RECV_THREAD_ROUTINE] MESSAGES: %s\n", buf);
+      //fprintf(stdout, "[RECV_THREAD_ROUTINE] MESSAGES: %s\n", buf);
 
       size_t len = strlen(buf);
       char* queueBuf_elem = (char*)calloc(len+1, sizeof(char));
@@ -444,6 +443,8 @@ void* usr_list_recv_thread_routine(void* args){
   UNREF(buf_modifications);
 
   fprintf(stderr, "[RECV_THREAD_ROUTINE] exiting usr_list_recv_thread_routine\n");
+
+  fprintf(stderr, "[RECV_THREAD_ROUTINE] Server closed end-point exit program with CTRL-C\n");
 
   pthread_exit(NULL);
 
@@ -550,23 +551,32 @@ int main(int argc, char* argv[]){
 
   while(1){
 
-    fprintf(stdout, "[MAIN] exit/connect to/list: ");
+    if(CONNECTED){
+      fprintf(stdout, "[MAIN] Enter message: ");
+    }
+    else{
+      fprintf(stdout, "[MAIN] IMPUT COMMAND (exit/list/connect): ");
+    }
 
     fgets(buf_commands+1, MSG_LEN-3, stdin);
 
-    fprintf(stdout, "[MAIN] buf_commands = %s\n", buf_commands);
+    //fprintf(stdout, "[MAIN] buf_commands = %s\n", buf_commands);
 
-
-    if(CONNECTED==1){ //per inviare messaggi in chat
+    if(CONNECTED){ //per inviare messaggi in chat
 
       buf_commands[0] = MESSAGE; //per il parsing per i messaggi
 
-      //aggiungere il controllo per exit!!
       buf_commands[strlen(buf_commands)]   = '\n';
       buf_commands[strlen(buf_commands)+1] = '\0';
-      send_msg(socket_desc, buf_commands); //aggiungere \n al
+      send_msg(socket_desc, buf_commands);
 
-      fprintf(stdout, "[MAIN] MESSAGE IS: %s\n", buf_commands);
+      fprintf(stdout, "[MAIN] buf_commands = %s\n", buf_commands);
+
+      if(strcmp(buf_commands,"xexit\n\n")==0){
+        CONNECTED = 0;
+        memset(buf_commands, 0, MSG_LEN);
+        continue;
+      }
 
       memset(buf_commands+1, 0, MSG_LEN-1);
       continue;
@@ -580,7 +590,7 @@ int main(int argc, char* argv[]){
 
     else if(strcmp(buf_commands+1, "connect\n")==0){ //per chattare
 
-      fprintf(stdout, "[MAIN] passato il connect\n");
+      fprintf(stdout, "[MAIN] Connect to: ");
 
       user_buf[0] = CONNECTION_REQUEST;
 
