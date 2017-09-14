@@ -28,7 +28,7 @@ char* buf_commands;
 char* available;
 char* unavailable;
 char* disconnect;
-int CONNECTED; // 0 se non connesso 1 se connesso
+int   CONNECTED; // 0 se non connesso 1 se connesso
 
 
 static void print_userList(gpointer key, gpointer elem, gpointer data){
@@ -235,7 +235,7 @@ void* read_updates(void* args){
   read_updates_args_t* arg = (read_updates_args_t*)args;
 
   GAsyncQueue* buf = REF(arg->read_updates_mailbox);
-  int socket_to_server = (int)(arg->server_socket);
+  //int socket_to_server = (int)(arg->server_socket); controllare se serve
 
   while(1){
 
@@ -502,7 +502,7 @@ int main(int argc, char* argv[]){
   //
   //creating and spawning user list receiver thread with parameters
   read_updates_args_t* thread_usrl_recv_args = (read_updates_args_t*)malloc(sizeof(read_updates_args_t));
-  thread_usrl_recv_args->server_socket = socket_desc;
+  //thread_usrl_recv_args->server_socket = socket_desc; non dovrebbe servire
 
   pthread_t thread_usrl_recv;
   ret = pthread_create(&thread_usrl_recv, NULL, usr_list_recv_thread_routine, (void*)thread_usrl_recv_args);
@@ -552,18 +552,23 @@ int main(int argc, char* argv[]){
 
     fprintf(stdout, "[MAIN] exit/connect to/list: ");
 
-    fgets(buf_commands+1, MSG_LEN-1, stdin);
+    fgets(buf_commands+1, MSG_LEN-3, stdin);
 
     fprintf(stdout, "[MAIN] buf_commands = %s\n", buf_commands);
 
 
     if(CONNECTED==1){ //per inviare messaggi in chat
+
       buf_commands[0] = MESSAGE; //per il parsing per i messaggi
 
       //aggiungere il controllo per exit!!
+      buf_commands[strlen(buf_commands)]   = '\n';
+      buf_commands[strlen(buf_commands)+1] = '\0';
+      send_msg(socket_desc, buf_commands); //aggiungere \n al
 
-      send_msg(socket_desc, buf_commands); //aggiungere \n al buffer
-      memset(buf_commands, 0, MSG_LEN);
+      fprintf(stdout, "[MAIN] MESSAGE IS: %s\n", buf_commands);
+
+      memset(buf_commands+1, 0, MSG_LEN-1);
       continue;
     }
 
