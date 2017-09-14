@@ -212,6 +212,7 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
 
       if(connection_accepted(message_buf)){
         update_availability(element_to_update, "u");//set this client UNAVAILABLE
+        mod_command = MODIFY;
         notify(message_buf, args, &mod_command, element_to_update); //alerts all connected clients
 
         return ret;
@@ -312,8 +313,9 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
 
       push_entry(NULL, target_mailbox, message_buf); //push message in target mailbox
 
-      if(strcmp(message_buf + 1, "exit") != 0){
+      if(strcmp(message_buf + 1, "exit") == 0){
         update_availability(element_to_update, "a"); //set this client available
+        mod_command = MODIFY;
         notify(message_buf, args, &mod_command, element_to_update);
       } //not final
 
