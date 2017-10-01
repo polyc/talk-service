@@ -71,6 +71,72 @@ void list_command(){
 
 }
 
+void send_message(int socket){
+
+  buf_commands[0] = MESSAGE; //per il parsing per i messaggi
+
+  buf_commands[strlen(buf_commands)]   = '\n';
+  buf_commands[strlen(buf_commands)+1] = '\0';
+  send_msg(socket, buf_commands);
+
+  //fprintf(stdout, "[MAIN] buf_commands = %s\n", buf_commands);
+
+  if(strcmp(buf_commands,"xexit\n\n")==0){
+    CONNECTED = 0;
+    memset(buf_commands, 0, MSG_LEN);
+    return;
+  }
+
+  memset(buf_commands+1, 0, MSG_LEN-1);
+  return;
+}
+
+void connect_to(int socket, char* target_client){
+
+  fprintf(stdout, "[MAIN] Connect to: ");
+
+  target_client[0] = CONNECTION_REQUEST;
+
+  fgets(target_client+1, MSG_LEN-1, stdin);  //prende lo username
+
+  //sending chat username to server
+  send_msg(socket, target_client);
+
+  memset(buf_commands, 0, MSG_LEN);
+  memset(target_client, 0, MSG_LEN);
+
+  return;
+}
+
+void responde(int socket){
+
+  if(((buf_commands[1]=='y' || buf_commands[1]=='n') && strlen(buf_commands)==3)){
+
+    if(buf_commands[1] == 'y'){
+      CONNECTED = 1;
+    }
+    else{
+      CONNECTED = 0;
+    }
+
+    strcpy(buf_commands+2, USERNAME_CHAT); //USERNAME_CHAT o USERNAME...CONTROLLARE!!
+    buf_commands[strlen(buf_commands)] = '\n';
+    buf_commands[strlen(buf_commands)+1] = '\0';
+
+    send_msg(socket, buf_commands);
+
+    memset(buf_commands, 0, MSG_LEN);
+    return;
+  }
+
+  else{
+    fprintf(stdout, "[MAIN] Wrong input for connetion response\n");
+    memset(buf_commands+1, 0, MSG_LEN);
+    return;
+  }
+
+}
+
 int get_username(char* username, int socket){
 
   //changed USERNAME_BUF_SIZE + 1 because fgets puts in buffer the \n character
@@ -564,23 +630,8 @@ int main(int argc, char* argv[]){
 
     //fprintf(stdout, "[MAIN] buf_commands = %s\n", buf_commands);
 
-    if(CONNECTED){ //per inviare messaggi in chat
-
-      buf_commands[0] = MESSAGE; //per il parsing per i messaggi
-
-      buf_commands[strlen(buf_commands)]   = '\n';
-      buf_commands[strlen(buf_commands)+1] = '\0';
-      send_msg(socket_desc, buf_commands);
-
-      fprintf(stdout, "[MAIN] buf_commands = %s\n", buf_commands);
-
-      if(strcmp(buf_commands,"xexit\n\n")==0){
-        CONNECTED = 0;
-        memset(buf_commands, 0, MSG_LEN);
-        continue;
-      }
-
-      memset(buf_commands+1, 0, MSG_LEN-1);
+    if(CONNECTED){ //per inviare messaggi in chat //messaggio contenuto in buf_commands
+      send_message(socket_desc);
       continue;
     }
 
@@ -591,49 +642,13 @@ int main(int argc, char* argv[]){
     }
 
     else if(strcmp(buf_commands+1, "connect\n")==0){ //per chattare
-
-      fprintf(stdout, "[MAIN] Connect to: ");
-
-      user_buf[0] = CONNECTION_REQUEST;
-
-      fgets(user_buf+1, MSG_LEN-1, stdin);  //prende lo username
-
-      //sending chat username to server
-      send_msg(socket_desc, user_buf);
-
-      memset(buf_commands, 0, MSG_LEN);
-      memset(user_buf, 0, MSG_LEN);
-
-      continue; //nonn deve essere continue ma deve fare qualcosa per la chat
+      connect_to(socket_desc, user_buf);
+      continue;
     }
 
     else if(buf_commands[0] == CONNECTION_RESPONSE){
-
-      if(((buf_commands[1]=='y' || buf_commands[1]=='n') && strlen(buf_commands)==3)){
-
-        if(buf_commands[1] == 'y'){
-          CONNECTED = 1;
-        }
-        else{
-          CONNECTED = 0;
-        }
-
-        strcpy(buf_commands+2, USERNAME_CHAT);
-        buf_commands[strlen(buf_commands)] = '\n';
-        buf_commands[strlen(buf_commands)+1] = '\0';
-
-        send_msg(socket_desc, buf_commands);
-
-        memset(buf_commands, 0, MSG_LEN);
-        continue;
-      }
-
-      else{
-        fprintf(stdout, "[MAIN] Wrong input for connetion response\n");
-        memset(buf_commands+1, 0, MSG_LEN);
-        continue;
-      }
-
+      responde(socket_desc);
+      continue;
     }
 
     else if(strcmp(buf_commands+1, "exit\n")==0){ //per uscire dal programma
