@@ -3,7 +3,7 @@
 #include <errno.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <stdio.h>
+#include <stdio.h>               //FIXARE CASO CTRL-C DURANTE LA CHAT(SERVER NON AGGIORNA IL CLIENT RIMASTO IN CHAT)
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -48,7 +48,7 @@ char* parse_username(char* src, char* dest, char message_type){
 }
 
 int connection_accepted(char* response){
-  if(response[2] == 'y')
+  if(response[1] == 'y')
     return 1;
   else
     return 0;
@@ -144,20 +144,30 @@ void remove_entry(char* elem_to_remove, char* mailbox_to_remove){
 
 //pushing message into sender thread personal GAsyncQueue
 void push_entry(gpointer key, gpointer value, gpointer user_data){
-  //bisogna gestire l'invio a se stesso
-    char* message = (char*)calloc(MSG_LEN, 1);
-    message = strcpy(message, (char*)user_data);
+  push_entry_args_t* args = (push_entry_args_t*)user_data;
 
-  //if((strcmp((char*)key, ((mailbox_message_t*)(user_data))->client_user_name)) != 0){
+  if(strcmp((char*)key, (char*)(args->sender_username)) != 0){
+    char* message = (char*)calloc(MSG_LEN, 1);
+    memcpy(message, args->message, MSG_LEN);
+
     GAsyncQueue* ref_value = REF((GAsyncQueue*)value);
     PUSH(ref_value, (gpointer)message);
     UNREF(ref_value);
-  //}
-  return;
+  }
 }
 
-//sender retrieve message from its queue
-//void pop_entry(){}
+void getTargetElement(char* target_buf, usr_list_elem_t* target_element){
+
+  int ret = sem_wait(&user_list_mutex);
+  ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on user_list_mutex");
+
+  target_element = LOOKUP(user_list, (gpointer)target_buf);
+
+  ret = sem_post(&user_list_mutex);
+  ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on mailbox_list_mutex");
+
+  return;
+}
 
 //function called by FOR_EACH. It sends userlist on connection to receiver thread in client
 void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_data){
@@ -171,11 +181,11 @@ void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_
 }
 
 //push a message to all clients connected to server
-void push_all(char* message_buf){
+void push_all(push_entry_args_t* args){
   int err = sem_wait(&mailbox_list_mutex);
   ERROR_HELPER(err, "[CONNECTION THREAD]: cannot wait on mailbox_list_mutex");
 
-  FOR_EACH(mailbox_list, (GHFunc)push_entry, (gpointer)message_buf);
+  FOR_EACH(mailbox_list, (GHFunc)push_entry, (gpointer)args);
 
   err = sem_post(&mailbox_list_mutex);
   ERROR_HELPER(err, "[CONNECTION THREAD]: cannot post on mailbox_list_mutex");
@@ -187,21 +197,30 @@ void notify(char* message_buf, thread_args_t* args, char* mod_command, usr_list_
   memset(message_buf, 0, MSG_LEN);
   serialize_user_element(message_buf, element_to_update, args->client_user_name, *mod_command);
 
+  push_entry_args_t* a = (push_entry_args_t*)malloc(sizeof(push_entry_args_t));
+  a->message = message_buf;
+  a->sender_username = args->client_user_name;
+
   //pushing updates to mailboxes
-  push_all(message_buf);
+  push_all(a);
+  free(a); //non necessita di free nei campi interni poichè essi sono o dati immutabili condivisi
+           //o buffer riutilizzabili in funzioni non concorrenti
 }
 
 int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* element_to_update, char* target_buf){
 
   int ret = 0;
 
-  //selecting correct command
+  //parsing command
   char message_type = message_buf[0];
   char mod_command;
-  int size_buf = strlen(message_buf);
+  int size_buf;
 
+  //status variables
   GAsyncQueue* target_mailbox;
   GAsyncQueue** value;
+  usr_list_elem_t* target_element = NULL;
+  push_entry_args_t* p_args;
 
   fprintf(stdout, "[CONNECTION THREAD] message_type: %c\n", message_type);
 
@@ -210,31 +229,45 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
     case CONNECTION_RESPONSE :
       parse_username(message_buf, target_buf, CONNECTION_RESPONSE);
 
-      if(connection_accepted(message_buf)){
-        update_availability(element_to_update, "u");//set this client UNAVAILABLE
-        mod_command = MODIFY;
-        notify(message_buf, args, &mod_command, element_to_update); //alerts all connected clients
+      //---push connection response in target mailbox---
 
-        return ret;
-      }
       ret = sem_wait(&mailbox_list_mutex);
       ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on mailbox_list_mutex");
-
       //search for target mailbox
       target_mailbox = NULL;
       value = &target_mailbox;
       ret = g_hash_table_lookup_extended(mailbox_list, (gconstpointer)target_buf, NULL, (gpointer*)value);
-
+      ///////////////////////////////
       ret = sem_post(&mailbox_list_mutex);
       ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on mailbox_list_mutex");
 
       fprintf(stdout, "[CONNECTION THREAD]: MESSAGE = %s\n", message_buf);
 
-
-      message_buf[size_buf] = '\n'; //these operations need to be hidden
+      //these operations need to be hidden
+      size_buf = strlen(message_buf);
+      message_buf[size_buf] = '\n';
       message_buf[size_buf+1] = '\0';
 
-      push_entry(NULL, target_mailbox, message_buf); //push message in target mailbox
+      p_args = (push_entry_args_t*)malloc(sizeof(push_entry_args_t));
+      p_args->message = message_buf;
+      p_args->sender_username = args->client_user_name;
+
+      push_entry(target_buf, target_mailbox, p_args); //push connection response
+      free(p_args);
+
+      if(connection_accepted(message_buf)){
+        update_availability(element_to_update, "u");//set this client UNAVAILABLE
+        mod_command = MODIFY;
+        notify(message_buf, args, &mod_command, element_to_update); //alerts all connected clients
+      }
+
+      else{ //(connection not accepted) = reset target-response availability because before it was setted UNAVAILABLE
+        getTargetElement(target_buf, target_element);
+        update_availability(target_element, "u");//set target-response client AVAILABLE
+        mod_command = MODIFY;
+        notify(message_buf, args, &mod_command, element_to_update); //alerts all connected clients
+      }
+
       return 0;
 
     //handle connection requests to other clients and check if they are available
@@ -248,7 +281,6 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
       usr_list_elem_t* target = (usr_list_elem_t*)LOOKUP(user_list, target_buf);
 
       if(target != NULL && target->a_flag == AVAILABLE){ //if true, send CONNECTION_REQUEST to target
-
         ret = sem_post(&user_list_mutex);
         ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
 
@@ -259,28 +291,35 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
         //send request to target client
         memset(message_buf, 0, MSG_LEN);
         message_buf[0] = CONNECTION_REQUEST;
+        fprintf(stdout, "%s]\n", args->client_user_name);
         strcpy(message_buf + 1, args->client_user_name);
-        message_buf[strlen(message_buf)] = '\n';
-        message_buf[strlen(message_buf)+1] = '\0';
+        size_buf = strlen(message_buf);
+        message_buf[size_buf] = '\n';
+        message_buf[size_buf+1] = '\0';
 
+        //---push connection request in target mailbox---
         ret = sem_wait(&mailbox_list_mutex);
         ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on mailbox_list_mutex");
-
         //search for target mailbox
         target_mailbox = NULL;
         value = &target_mailbox;
         ret = g_hash_table_lookup_extended(mailbox_list, (gconstpointer)target_buf, NULL, (gpointer*)value);
-
+        //////////////////////////
         ret = sem_post(&mailbox_list_mutex);
         ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on mailbox_list_mutex");
 
         fprintf(stdout, "[CONNECTION THREAD]: MESSAGE = %s\n", message_buf);
 
-        push_entry(NULL, target_mailbox, message_buf); //push message in target mailbox
+        p_args = (push_entry_args_t*)malloc(sizeof(push_entry_args_t));
+        p_args->message = message_buf;
+        p_args->sender_username = args->client_user_name;
+
+        push_entry(target_buf, target_mailbox, p_args);  //push connection request
+        free(p_args);
 
         return 0;
       }
-      else{
+      else{//unavailable or not existent
 
         ret = sem_post(&user_list_mutex);
         ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
@@ -308,16 +347,28 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
       fprintf(stdout, "[CONNECTION THREAD]: MESSAGE = %s\n", message_buf);
 
 
-      message_buf[size_buf] = '\n'; //these operations need to be hidden
+      //these operations need to be hidden
+      size_buf = strlen(message_buf);
+      message_buf[size_buf] = '\n';
       message_buf[size_buf+1] = '\0';
 
-      push_entry(NULL, target_mailbox, message_buf); //push message in target mailbox
+      p_args = (push_entry_args_t*)malloc(sizeof(push_entry_args_t));
+      p_args->message = message_buf;
+      p_args->sender_username = args->client_user_name;
 
-      if(strcmp(message_buf + 1, "exit") == 0){
+      push_entry(target_buf, target_mailbox, p_args); //push chat message in target mailbox
+      free(p_args);
+
+      //check exit condition
+      if(strcmp(message_buf + 1, EXIT) == 0){
         update_availability(element_to_update, "a"); //set this client available
+
+        getTargetElement(target_buf, target_element);
+        update_availability(target_element, "a"); //set target client available
+
         mod_command = MODIFY;
-        notify(message_buf, args, &mod_command, element_to_update);
-      } //not final
+        notify(message_buf, args, &mod_command, target_element);
+      }
 
       return 0;
 
@@ -328,7 +379,7 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
 
       //notify sender thread the termination condition
       GAsyncQueue* mailbox = (GAsyncQueue*)LOOKUP(mailbox_list, args->mailbox_key);
-      message_buf = "exit";
+      message_buf = "term";
       PUSH(mailbox, (gpointer)message_buf);
 
       //delete entry from hastables
@@ -393,6 +444,8 @@ void* connection_handler(void* arg){
 
   int ret;
 
+  char* mod_command = (char*)malloc(sizeof(char));
+
   //command receiver buffer
   char* message_buf = (char*)calloc(MSG_LEN, sizeof(char));
 
@@ -452,21 +505,15 @@ void* connection_handler(void* arg){
   ERROR_HELPER(ret, "[CONNECTION THREAD %d]:cannot post on chandler_sync");
 
 
-  //wait for sender thread
+  //wait for sender thread init
   ret = sem_wait(args->sender_sync);
   ERROR_HELPER(ret, "[CONNECTION THREAD %d]:cannot wait on chandler_sync");
 
   //pushing updates to mailboxes
-  char* message = (char*)calloc(USERLIST_BUFF_SIZE, sizeof(char));
-  serialize_user_element(message, element, args->client_user_name, NEW);
-
-  ret = sem_wait(&mailbox_list_mutex);
-  ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on user_list_mutex");
-
-  FOR_EACH(mailbox_list, (GHFunc)push_entry, (gpointer)message);
-
-  ret = sem_post(&mailbox_list_mutex);
-  ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
+  char* message = (char*)calloc(MSG_LEN, sizeof(char));
+  mod_command[0] = NEW;
+  notify(message, args, mod_command, element);
+  free(message);
 
   //RECEIVING COMMANDS
   while(1){
@@ -483,7 +530,7 @@ void* connection_handler(void* arg){
     fprintf(stdout, "before exc:%d\n", ret);
 
     ret = execute_command(args, message_buf, element, target_useraname_buf);
-    fprintf(stdout, "after exc:%d\n", ret);
+    fprintf(stdout, "after exc: %d\n", ret);
     if (ret < 0){
       break; //exit condition
     }
@@ -565,8 +612,8 @@ void* sender_routine(void* arg){
 
     if(message == NULL)continue;
 
-    if (strcmp(message, "exit") == 0) {
-      fprintf(stdout, "[SENDER THREAD %d: exiting sender routine]\n", args->id);
+    if (strcmp(message, "term") == 0) {
+      fprintf(stdout, "[SENDER THREAD %d: terminating sender routine]\n", args->id);
       break;
     }
 

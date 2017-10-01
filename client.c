@@ -78,7 +78,7 @@ int get_username(char* username, int socket){
 
   int i, ret;
 
-  fprintf(stdout, "[GET_USERNAME] Enter username: ");
+  fprintf(stdout, "[GET_USERNAME] Enter username(max 16 char): ");
 
   username = fgets(username, USERNAME_BUF_SIZE, stdin);
 
@@ -102,6 +102,7 @@ int get_username(char* username, int socket){
   //creating buffer for username and availability flag
   char* buf = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
   strncpy(buf, username, strlen(username));
+  buf[strlen(buf)] = '\n';
 
   //sending username to server
   send_msg(socket, buf);
@@ -251,7 +252,7 @@ void* read_updates(void* args){
       }
     }
 
-    //fprintf(stdout, "[READ_UPDATES] Elem buff: %s\n", elem_buf);
+    fprintf(stdout, "[READ_UPDATES] Elem buff[0]: %c\n", elem_buf[0]);
 
     //fprintf(stdout, "[READ_UPDATES] Connection request");
 
@@ -272,11 +273,11 @@ void* read_updates(void* args){
 
     else if(elem_buf[0] == CONNECTION_REQUEST){
 
+      fprintf(stdout, "[READ_UPDATES] Connection request from [%s] accept [y] refuse [n]: \n", elem_buf+1);
+
       buf_commands[0] = CONNECTION_RESPONSE;
 
       strcpy(USERNAME_CHAT, elem_buf+1);
-
-      fprintf(stdout, "[READ_UPDATES] Connection request from [%s] accept [y] refuse [n]: ", USERNAME_CHAT);
 
       free(elem_buf);
 
@@ -290,7 +291,7 @@ void* read_updates(void* args){
 
         strcpy(USERNAME_CHAT, elem_buf+2);
 
-        fprintf(stdout, "[READ_UPDATES] Response form server is YES! You are now chatting with: %s\n", USERNAME_CHAT);
+        fprintf(stdout, "[READ_UPDATES] Response from server is YES! You are now chatting with: %s\n", USERNAME_CHAT);
 
         CONNECTED = 1;
         buf_commands[0] = MESSAGE;
@@ -298,7 +299,7 @@ void* read_updates(void* args){
       }
 
       else{
-        fprintf(stdout, "[READ_UPDATES] Response form server is NO! :(\n");
+        fprintf(stdout, "[READ_UPDATES] Response from server is NO! :(\n");
         CONNECTED = 0;
       }
 
