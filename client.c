@@ -259,6 +259,7 @@ void* read_updates(void* args){
 
       if(!strcmp(elem_buf+1,"exit")){
         CONNECTED = 0;
+        fprintf(stdout, "[Receiving chat] exit message received press ENTER to exit chat\n");
         memset(USERNAME_CHAT, 0, USERNAME_BUF_SIZE);
         continue;
       }
