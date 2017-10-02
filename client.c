@@ -29,6 +29,7 @@ char* available;
 char* unavailable;
 char* disconnect;
 int   CONNECTED; // 0 se non connesso 1 se connesso
+int   MAIN_EXIT;
 
 
 static void print_userList(gpointer key, gpointer elem, gpointer data){
@@ -93,40 +94,13 @@ void send_message(int socket){
 
 void connect_to(int socket, char* target_client){
 
-  int ret, i=0;
-
   fprintf(stdout, "[MAIN] Connect to: ");
 
   target_client[0] = CONNECTION_REQUEST;
 
   fgets(target_client+1, MSG_LEN-1, stdin);  //prende lo username
 
-  while(target_client[i]!='\n'){
-    i++;
-  }
-
-  target_client[i] = '\0';
-
-  ret = sem_wait(&sync_userList);
-  ERROR_HELPER(ret, "[UPDATE_LIST] Error in wait function on sync_userList semaphore\n");
-
-  usr_list_elem_t* element = (usr_list_elem_t*)LOOKUP(user_list, (gconstpointer)target_client+1);
-
-  if(element == NULL || element->a_flag == UNAVAILABLE){
-
-    ret = sem_post(&sync_userList);
-    ERROR_HELPER(ret, "[UPDATE_LIST] Error in post function on sync_userList semaphore\n");
-
-    fprintf(stdout, "[MAIN] Requested client not available or doesn't exist\n");
-
-    memset(buf_commands,  0, MSG_LEN);
-    memset(target_client, 0, MSG_LEN);
-    
-    return;
-  }
-
   //sending chat username to server
-  target_client[i] = '\n';
   send_msg(socket, target_client);
 
   memset(buf_commands,  0, MSG_LEN);
@@ -219,6 +193,7 @@ int get_username(char* username, int socket){
   return 1; //usrname ok
 }
 
+//mettere uno switch e' piu' mejo!
 void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command){
 
   int ret;
@@ -481,15 +456,15 @@ void* usr_list_recv_thread_routine(void* args){
 
   fprintf(stderr, "[RECV_THREAD_ROUTINE] address binded to socket\n");
 
-  //ublocking &sync_receiver for main process
-  ret = sem_post(&sync_receiver);
-  ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] Error in sem_post on &sync_receiver semaphore (user list receiver thread routine)");
-
   //user list receiver thread listening for incoming connections
   ret = listen(usrl_recv_socket, 1);
   ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] Cannot listen on user list receiver thread socket");
 
   fprintf(stderr, "[RECV_THREAD_ROUTINE] listening on socket for server connection\n");
+
+  //ublocking &sync_receiver for main process
+  ret = sem_post(&sync_receiver);
+  ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] Error in sem_post on &sync_receiver semaphore (user list receiver thread routine)");
 
   //accepting connection from server on user list receiver thread socket
   int rec_socket = accept(usrl_recv_socket, (struct sockaddr*) &usrl_sender_address, &usrl_sender_address_len);
@@ -502,6 +477,11 @@ void* usr_list_recv_thread_routine(void* args){
 
   //receiving user list element from server
   while(1){
+
+      if(MAIN_EXIT){
+        break;
+      }
+
       memset(buf, 0, MSG_LEN);
 
       //receiveing user list element from server
@@ -550,6 +530,7 @@ int main(int argc, char* argv[]){
 
   int ret;
   CONNECTED = 0; // non sono connesso a nessuno per adesso
+  MAIN_EXIT = 0;
   USERNAME_CHAT = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
 
   fprintf(stdout, "[MAIN] starting main process\n");
@@ -678,6 +659,7 @@ int main(int argc, char* argv[]){
     }
 
     else if(strcmp(buf_commands+1, "exit\n")==0){ //per uscire dal programma
+      MAIN_EXIT = 1;
       break;
     }
 
@@ -685,6 +667,8 @@ int main(int argc, char* argv[]){
 
   //sending disconnect command to server
   send_msg(socket_desc, disconnect);
+
+  ret = pthread_join(thread_usrl_recv, NULL);
 
   fprintf(stdout, "[MAIN] destroying semaphores....\n");
 
@@ -699,6 +683,7 @@ int main(int argc, char* argv[]){
   free(available);
   free(unavailable);
   free(disconnect);
+  free(MAIN_EXIT);
 
   fprintf(stdout, "[MAIN] closing socket descriptors...\n");
 
@@ -707,6 +692,7 @@ int main(int argc, char* argv[]){
   ERROR_HELPER(ret, "[MAIN] Cannot close socket_desc");
 
   fprintf(stdout, "[MAIN] exiting main process\n\n");
+
 
   exit(EXIT_SUCCESS);
 
