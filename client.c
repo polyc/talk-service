@@ -93,16 +93,43 @@ void send_message(int socket){
 
 void connect_to(int socket, char* target_client){
 
+  int ret, i=0;
+
   fprintf(stdout, "[MAIN] Connect to: ");
 
   target_client[0] = CONNECTION_REQUEST;
 
   fgets(target_client+1, MSG_LEN-1, stdin);  //prende lo username
 
+  while(target_client[i]!='\n'){
+    i++;
+  }
+
+  target_client[i] = '\0';
+
+  ret = sem_wait(&sync_userList);
+  ERROR_HELPER(ret, "[UPDATE_LIST] Error in wait function on sync_userList semaphore\n");
+
+  usr_list_elem_t* element = (usr_list_elem_t*)LOOKUP(user_list, (gconstpointer)target_client+1);
+
+  if(element == NULL || element->a_flag == UNAVAILABLE){
+
+    ret = sem_post(&sync_userList);
+    ERROR_HELPER(ret, "[UPDATE_LIST] Error in post function on sync_userList semaphore\n");
+
+    fprintf(stdout, "[MAIN] Requested client not available or doesn't exist\n");
+
+    memset(buf_commands,  0, MSG_LEN);
+    memset(target_client, 0, MSG_LEN);
+    
+    return;
+  }
+
   //sending chat username to server
+  target_client[i] = '\n';
   send_msg(socket, target_client);
 
-  memset(buf_commands, 0, MSG_LEN);
+  memset(buf_commands,  0, MSG_LEN);
   memset(target_client, 0, MSG_LEN);
 
   return;
@@ -222,6 +249,7 @@ void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command){
     return;
   }
   else{
+
     REMOVE(user_list, (gpointer)buf_userName);
 
     fprintf(stdout, "[UPDATE_LIST] removed entry [%s] in user list\n", buf_userName);
@@ -613,7 +641,7 @@ int main(int argc, char* argv[]){
   fprintf(stdout, "[MAIN] got username: [%s]\n", USERNAME);
 
   buf_commands = (char*)calloc(MSG_LEN, sizeof(char));
-  buf_commands[0] = '-';
+  buf_commands[0] = '-'; //orribile vedi se lo puoi cancellare
 
   char* user_buf = (char*)calloc(MSG_LEN, sizeof(char));
 
@@ -628,10 +656,13 @@ int main(int argc, char* argv[]){
 
     fgets(buf_commands+1, MSG_LEN-3, stdin);
 
-    //fprintf(stdout, "[MAIN] buf_commands = %s\n", buf_commands);
-
     if(CONNECTED){ //per inviare messaggi in chat //messaggio contenuto in buf_commands
       send_message(socket_desc);
+      continue;
+    }
+
+    else if(buf_commands[0] == CONNECTION_RESPONSE){
+      responde(socket_desc);
       continue;
     }
 
@@ -641,13 +672,8 @@ int main(int argc, char* argv[]){
       continue;
     }
 
-    else if(strcmp(buf_commands+1, "connect\n")==0){ //per chattare
+    else if(strcmp(buf_commands+1, "connect\n")==0){ //per connettersi al client
       connect_to(socket_desc, user_buf);
-      continue;
-    }
-
-    else if(buf_commands[0] == CONNECTION_RESPONSE){
-      responde(socket_desc);
       continue;
     }
 
