@@ -28,12 +28,13 @@ int thread_count;
 char* parse_username(char* src, char* dest, char message_type){
   int i;
   int len = strlen(src);
+
   if(message_type == CONNECTION_REQUEST){
     for (i = 1; i < len; i++) {
       dest[i - 1] = src[i];
       printf("[parse] %d, %c\n", i, dest[i-1]);
     }
-    dest[len-1] = '\0';
+    dest[i-1] = '\0';
     return dest;
   }
   else if(message_type == CONNECTION_RESPONSE){
@@ -41,7 +42,7 @@ char* parse_username(char* src, char* dest, char message_type){
       dest[i - 2] = src[i];
       printf("[parse] %d, %c\n", i, dest[i-2]);
     }
-    dest[len-1] = '\0';
+    dest[i-2] = '\0';
     return dest;
   }
   return dest;
@@ -93,12 +94,12 @@ int get_and_check_username(int socket, char* username){
   return 0;
 }
 
-void update_availability(usr_list_elem_t* elem_to_update, char* buf_command){
+void update_availability(usr_list_elem_t* elem_to_update, char buf_command){
   //updating user_list
   int ret = sem_wait(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD][UPDATING AVAILABILITY]: cannot wait on user_list_mutex");
 
-  elem_to_update->a_flag = *buf_command; //update availability flag
+  elem_to_update->a_flag = buf_command; //update availability flag
 
   ret = sem_post(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD][UPDATING AVAILABILITY]: cannot post on user_list_mutex");
@@ -156,17 +157,17 @@ void push_entry(gpointer key, gpointer value, gpointer user_data){
   }
 }
 
-void getTargetElement(char* target_buf, usr_list_elem_t* target_element){
+usr_list_elem_t* getTargetElement(char* target_buf){
 
   int ret = sem_wait(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on user_list_mutex");
 
-  target_element = LOOKUP(user_list, (gpointer)target_buf);
+  usr_list_elem_t* target = (usr_list_elem_t*)LOOKUP(user_list, (gconstpointer)target_buf);
 
   ret = sem_post(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on mailbox_list_mutex");
 
-  return;
+  return target;
 }
 
 //function called by FOR_EACH. It sends userlist on connection to receiver thread in client
@@ -192,14 +193,14 @@ void push_all(push_entry_args_t* args){
 }
 
 //notify all clients
-void notify(char* message_buf, thread_args_t* args, char* mod_command, usr_list_elem_t* element_to_update){
+void notify(char* message_buf, char* element_username, char* mod_command, usr_list_elem_t* element_to_update){
   //generating message
   memset(message_buf, 0, MSG_LEN);
-  serialize_user_element(message_buf, element_to_update, args->client_user_name, *mod_command);
+  serialize_user_element(message_buf, element_to_update, element_username, *mod_command);
 
   push_entry_args_t* a = (push_entry_args_t*)malloc(sizeof(push_entry_args_t));
   a->message = message_buf;
-  a->sender_username = args->client_user_name;
+  a->sender_username = element_username;
 
   //pushing updates to mailboxes
   push_all(a);
@@ -219,8 +220,7 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
   //status variables
   GAsyncQueue* target_mailbox;
   GAsyncQueue** value;
-  usr_list_elem_t* target_element = NULL;
-  push_entry_args_t* p_args;
+  push_entry_args_t* p_args = NULL;
 
   fprintf(stdout, "[CONNECTION THREAD] message_type: %c\n", message_type);
 
@@ -244,6 +244,8 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
       fprintf(stdout, "[CONNECTION THREAD]: MESSAGE = %s\n", message_buf);
 
       //these operations need to be hidden
+      memset(message_buf+2, 0, strlen(message_buf)-2);
+      strcpy(message_buf+2, args->client_user_name);
       size_buf = strlen(message_buf);
       message_buf[size_buf] = '\n';
       message_buf[size_buf+1] = '\0';
@@ -256,16 +258,16 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
       free(p_args);
 
       if(connection_accepted(message_buf)){
-        update_availability(element_to_update, "u");//set this client UNAVAILABLE
+        update_availability(element_to_update, UNAVAILABLE);//set this client UNAVAILABLE
         mod_command = MODIFY;
-        notify(message_buf, args, &mod_command, element_to_update); //alerts all connected clients
+        notify(message_buf, args->client_user_name, &mod_command, element_to_update); //alerts all connected clients
       }
 
       else{ //(connection not accepted) = reset target-response availability because before it was setted UNAVAILABLE
-        getTargetElement(target_buf, target_element);
-        update_availability(target_element, "u");//set target-response client AVAILABLE
+        usr_list_elem_t* target_element = getTargetElement(target_buf);
+        update_availability(target_element, AVAILABLE);//set target-response client AVAILABLE
         mod_command = MODIFY;
-        notify(message_buf, args, &mod_command, element_to_update); //alerts all connected clients
+        notify(message_buf, args->client_user_name, &mod_command, element_to_update); //alerts all connected clients
       }
 
       return 0;
@@ -285,13 +287,12 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
         ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
 
         mod_command = MODIFY;
-        update_availability(element_to_update, "u"); //set this client UNAVAILABLE
-        notify(message_buf, args, &mod_command, element_to_update);
+        update_availability(element_to_update, UNAVAILABLE); //set this client UNAVAILABLE
+        notify(message_buf, args->client_user_name, &mod_command, element_to_update);
 
         //send request to target client
         memset(message_buf, 0, MSG_LEN);
         message_buf[0] = CONNECTION_REQUEST;
-        fprintf(stdout, "%s]\n", args->client_user_name);
         strcpy(message_buf + 1, args->client_user_name);
         size_buf = strlen(message_buf);
         message_buf[size_buf] = '\n';
@@ -346,7 +347,6 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
 
       fprintf(stdout, "[CONNECTION THREAD]: MESSAGE = %s\n", message_buf);
 
-
       //these operations need to be hidden
       size_buf = strlen(message_buf);
       message_buf[size_buf] = '\n';
@@ -361,13 +361,17 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
 
       //check exit condition
       if(strcmp(message_buf + 1, EXIT) == 0){
-        update_availability(element_to_update, "a"); //set this client available
 
-        getTargetElement(target_buf, target_element);
-        update_availability(target_element, "a"); //set target client available
-
+        update_availability(element_to_update, AVAILABLE); //set this client available
         mod_command = MODIFY;
-        notify(message_buf, args, &mod_command, target_element);
+        notify(message_buf, args->client_user_name, &mod_command, element_to_update);
+
+        usr_list_elem_t* target_element = getTargetElement(target_buf);
+        update_availability(target_element, AVAILABLE); //set target client available
+        mod_command = MODIFY;
+        notify(message_buf, target_buf, &mod_command, target_element);
+
+        printf("[CONNECTION THREAD]: exit chat\n");
       }
 
       return 0;
@@ -375,7 +379,7 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
     case DISCONNECT:
       mod_command = DELETE;
       //update for other senders
-      notify(message_buf, args, &mod_command, element_to_update);
+      notify(message_buf, args->client_user_name, &mod_command, element_to_update);
 
       //notify sender thread the termination condition
       GAsyncQueue* mailbox = (GAsyncQueue*)LOOKUP(mailbox_list, args->mailbox_key);
@@ -512,7 +516,7 @@ void* connection_handler(void* arg){
   //pushing updates to mailboxes
   char* message = (char*)calloc(MSG_LEN, sizeof(char));
   mod_command[0] = NEW;
-  notify(message, args, mod_command, element);
+  notify(message, args->client_user_name, mod_command, element);
   free(message);
 
   //RECEIVING COMMANDS
