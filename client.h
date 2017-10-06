@@ -11,6 +11,8 @@ typedef struct read_updates_args_s{
 #define MSG_LEN 256
 #define MAIN_CMD_LEN 9
 
+#define CMD_STRING "\n<<Client commands>>\n\n<<list: display chat list>>\n<<connect: connect to client>>\n<<help: display available commands>>\n<<exit: exit program>>\n\n"
+
 //thread routines
 void* usr_list_recv_thread_routine(void *args);
 void* read_updates(void* args);
@@ -23,5 +25,6 @@ void list_command();
 void send_message(int socket);
 void connect_to(int socket, char* target_client);
 void responde(int socket);
+void display_commands();
 static void print_userList(gpointer key, gpointer elem, gpointer data);
 GHashTable* usr_list_init();

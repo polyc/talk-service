@@ -29,7 +29,7 @@ void send_msg(int socket, char *buf) {
     }
 }
 
-int recv_msg(int socket, char *buf, size_t buf_len) {
+int recv_msg(int socket, char *buf, size_t buf_len, int timer) {
     int ret;
     int bytes_read = 0;
 
@@ -38,6 +38,10 @@ int recv_msg(int socket, char *buf, size_t buf_len) {
         ret = recv(socket, buf + bytes_read, 1, 0);
 
         if (ret == 0) return -1; // client closed the socket
+        if (ret==-1 && (errno == EAGAIN || errno == EWOULDBLOCK)){
+          fprintf(stdout, "controllo EAGAIN\n");
+          return -2;
+        }
         if (ret == -1 && errno == EINTR) continue;
         ERROR_HELPER(ret, "Errore nella lettura da socket");
 

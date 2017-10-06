@@ -13,6 +13,7 @@
 #include <semaphore.h>
 #include <glib.h>
 #include <sys/prctl.h>
+#include <sys/time.h>
 
 #include "client.h"
 #include "common.h"
@@ -20,6 +21,7 @@
 
 sem_t sync_receiver;
 sem_t sync_userList;
+sem_t wait_response;
 GHashTable* user_list;
 
 char* USERNAME;
@@ -29,7 +31,7 @@ char* available;
 char* unavailable;
 char* disconnect;
 int   CONNECTED; // 0 se non connesso 1 se connesso
-int   MAIN_EXIT;
+int   GLOBAL_EXIT;
 
 
 static void print_userList(gpointer key, gpointer elem, gpointer data){
@@ -94,6 +96,8 @@ void send_message(int socket){
 
 void connect_to(int socket, char* target_client){
 
+  int ret;
+
   fprintf(stdout, "[MAIN] Connect to: ");
 
   target_client[0] = CONNECTION_REQUEST;
@@ -105,6 +109,10 @@ void connect_to(int socket, char* target_client){
 
   memset(buf_commands,  0, MSG_LEN);
   memset(target_client, 0, MSG_LEN);
+
+  //waiting for usrl_liste_thread_routine to bind address to socket and to listen
+  ret = sem_wait(&wait_response);
+  ERROR_HELPER(ret, "[MAIN] Error in sem_wait wait_response");
 
   return;
 }
@@ -191,6 +199,11 @@ int get_username(char* username, int socket){
 
   free(buf);
   return 1; //usrname ok
+}
+
+void display_commands(){
+  fprintf(stdout, CMD_STRING);
+  return;
 }
 
 //mettere uno switch e' piu' mejo!
@@ -297,9 +310,6 @@ void* read_updates(void* args){
 
   int ret;
 
-  ret = prctl(PR_SET_PDEATHSIG, SIGINT);
-  ERROR_HELPER(ret, "[READ_UPDATES] error on prctl function");
-
   fprintf(stdout, "[READ_UPDATES] inside function read_updates\n");
 
   read_updates_args_t* arg = (read_updates_args_t*)args;
@@ -314,11 +324,19 @@ void* read_updates(void* args){
 
     while(1){
 
+      if(GLOBAL_EXIT){
+        break;
+      }
+
       elem_buf = (char*)POP(buf, POP_TIMEOUT);
 
       if(elem_buf != NULL){
         break;
       }
+    }
+
+    if(GLOBAL_EXIT){
+      break;
     }
 
     fprintf(stdout, "[READ_UPDATES] Elem buff[0]: %c\n", elem_buf[0]);
@@ -372,6 +390,10 @@ void* read_updates(void* args){
         CONNECTED = 0;
       }
 
+      //ublocking &wait_response
+      ret = sem_post(&wait_response);
+      ERROR_HELPER(ret, "[READ_UPDATES] Error in sem_post on &wait_response semaphore");
+
       free(elem_buf);
       continue;
 
@@ -409,14 +431,21 @@ void* read_updates(void* args){
     free(command);
 
   }
+
+  fprintf(stdout, "[READ_UPDATES] exiting\n");
+
+  pthread_exit(NULL);
+
 }
 
 void* usr_list_recv_thread_routine(void* args){
 
   int ret;
 
-  ret = prctl(PR_SET_PDEATHSIG, SIGINT);
-  ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] error on prctl function");
+  struct timeval timeout;
+  timeout.tv_sec = 10;
+  timeout.tv_usec = 0;
+
 
   //socket descriptor for user list receiver thread
   int usrl_recv_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -470,6 +499,8 @@ void* usr_list_recv_thread_routine(void* args){
   int rec_socket = accept(usrl_recv_socket, (struct sockaddr*) &usrl_sender_address, &usrl_sender_address_len);
   ERROR_HELPER(ret, "[RECV_THREAD_ROUTINE] Cannot accept connection on user list receiver thread socket");
 
+  setsockopt(rec_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout));
+
   fprintf(stderr, "[RECV_THREAD_ROUTINE] accepted connection from server\n");
 
   //buffer for recv_msg function
@@ -478,16 +509,23 @@ void* usr_list_recv_thread_routine(void* args){
   //receiving user list element from server
   while(1){
 
-      if(MAIN_EXIT){
+      if(GLOBAL_EXIT){
         break;
       }
 
       memset(buf, 0, MSG_LEN);
 
       //receiveing user list element from server
+      //fprintf(stdout, "[RECV_THREAD_ROUTINE] bloccato nella receive\n"); //non riesco a passare la recv se voglio morire
       ret = recv_msg(rec_socket, buf, MSG_LEN);
 
-      if(ret==-1){
+      if(ret==-2){
+        continue;
+      }
+
+      //server morto
+      else if(ret==-1){
+        GLOBAL_EXIT = 1;
         break;
       }
 
@@ -502,7 +540,11 @@ void* usr_list_recv_thread_routine(void* args){
 
   } //end of while(1)
 
-  //this part of code will only be executed if server quits
+  //this part of code will only be executed if server or main quits
+
+  fprintf(stdout, "[RECV_THREAD_ROUTINE] joining read_updates\n");
+
+  ret = pthread_join(manage_updates, NULL);
 
   fprintf(stderr, "[RECV_THREAD_ROUTINE] closing rec_socket and arg->socket...\n");
 
@@ -515,12 +557,12 @@ void* usr_list_recv_thread_routine(void* args){
   fprintf(stderr, "[RECV_THREAD_ROUTINE] closed rec_socket and arg->socket succesfully\n");
 
   free(buf);
-  free(usrl_sender_address);
+  free(usrl_sender_address); //problema con questa free
   UNREF(buf_modifications);
 
   fprintf(stderr, "[RECV_THREAD_ROUTINE] exiting usr_list_recv_thread_routine\n");
 
-  fprintf(stderr, "[RECV_THREAD_ROUTINE] Server closed end-point exit program with CTRL-C\n");
+  fprintf(stderr, "[RECV_THREAD_ROUTINE] Server closed end-point press any key to exit\n");
 
   pthread_exit(NULL);
 
@@ -530,7 +572,7 @@ int main(int argc, char* argv[]){
 
   int ret;
   CONNECTED = 0; // non sono connesso a nessuno per adesso
-  MAIN_EXIT = 0;
+  GLOBAL_EXIT = 0;
   USERNAME_CHAT = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
 
   fprintf(stdout, "[MAIN] starting main process\n");
@@ -556,6 +598,10 @@ int main(int argc, char* argv[]){
   //creating sempahore for listen function in usrl_liste_thread_routine for bind action
   ret = sem_init(&sync_receiver, 0, 0);
   ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_receiver semaphore");
+
+  //creating semaphore for connect_to function
+  ret = sem_init(&wait_response, 0, 0);
+  ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &wait_response semaphore");
 
   //creating sempahore for mutual exlusion in userList
   ret = sem_init(&sync_userList, 0, 1);
@@ -626,13 +672,21 @@ int main(int argc, char* argv[]){
 
   char* user_buf = (char*)calloc(MSG_LEN, sizeof(char));
 
+  //display commands for first time
+  display_commands();
+
   while(1){
 
-    if(CONNECTED){
+    if(GLOBAL_EXIT){
+      fprintf(stdout, "[MAIN] Server is down exiting process...\n");
+      break;
+    }
+
+    else if(CONNECTED){
       fprintf(stdout, "[MAIN] Enter message: ");
     }
     else{
-      fprintf(stdout, "[MAIN] IMPUT COMMAND (exit/list/connect): ");
+      fprintf(stdout, "[MAIN] IMPUT COMMAND (help to display commands): ");
     }
 
     fgets(buf_commands+1, MSG_LEN-3, stdin);
@@ -647,20 +701,33 @@ int main(int argc, char* argv[]){
       continue;
     }
 
-    else if(strcmp(buf_commands+1, "list\n")==0){  //per la lista
+    else if(strcmp(buf_commands+1, "list\n")==0 && !GLOBAL_EXIT){  //per la lista
       list_command();
       memset(buf_commands, 0, MSG_LEN);
       continue;
     }
 
-    else if(strcmp(buf_commands+1, "connect\n")==0){ //per connettersi al client
+    else if(strcmp(buf_commands+1, "connect\n")==0 && !GLOBAL_EXIT){ //per connettersi al client
       connect_to(socket_desc, user_buf);
       continue;
     }
 
-    else if(strcmp(buf_commands+1, "exit\n")==0){ //per uscire dal programma
-      MAIN_EXIT = 1;
+    else if(strcmp(buf_commands+1, "help\n")==0 && !GLOBAL_EXIT){
+      display_commands();
+      continue;
+    }
+
+    else if(strcmp(buf_commands+1, "exit\n")==0 && !GLOBAL_EXIT){ //per uscire dal programma
+      GLOBAL_EXIT = 1;
+      fprintf(stdout, "[MAIN] GLOBAL_EXIT = 1\n");
       break;
+    }
+
+    else{
+      if(GLOBAL_EXIT){
+        break;
+      }
+      fprintf(stdout, "\n<< wrong input >>\n\n");
     }
 
   }
@@ -683,7 +750,7 @@ int main(int argc, char* argv[]){
   free(available);
   free(unavailable);
   free(disconnect);
-  free(MAIN_EXIT);
+  //free(GLOBAL_EXIT);
 
   fprintf(stdout, "[MAIN] closing socket descriptors...\n");
 
