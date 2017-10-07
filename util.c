@@ -39,7 +39,7 @@ int recv_msg(int socket, char *buf, size_t buf_len, int timer) {
 
         if (ret == 0) return -1; // client closed the socket
         if (ret==-1 && (errno == EAGAIN || errno == EWOULDBLOCK)){
-          fprintf(stdout, "controllo EAGAIN\n");
+          //fprintf(stdout, "controllo EAGAIN\n");
           return -2;
         }
         if (ret == -1 && errno == EINTR) continue;
