@@ -57,11 +57,12 @@ int connection_accepted(char* response){
 
 //receive username from client and check if it's already used by another connected client
 int get_and_check_username(int socket, char* username){
-  char* send_buf = (char*)calloc(2, sizeof(char)); //buffer used to send response to client
+  char* send_buf = (char*)calloc(3, sizeof(char)); //buffer used to send response to client
   while(1){
 
     int ret = recv_msg(socket, username, USERNAME_BUF_SIZE);
     if(ret == -1){
+      free(send_buf);
       return -1; //endpoint closed by client
     }
     ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot receive username");
@@ -76,6 +77,7 @@ int get_and_check_username(int socket, char* username){
 
       send_buf[0] = AVAILABLE;
       send_buf[1] = '\n';
+      send_buf[2] = '\0';
       send_msg(socket, send_buf); //sending OK to client
       break;
     }
@@ -85,9 +87,10 @@ int get_and_check_username(int socket, char* username){
 
       send_buf[0] = UNAVAILABLE;
       send_buf[1] = '\n';
+      send_buf[2] = '\0';
       send_msg(socket, send_buf);
       memset(username, 0, USERNAME_BUF_SIZE);
-      memset(send_buf, 0, 2);
+
     }
   }
   fprintf(stdout, "[CONNECTION THREAD]: username getted\n");
@@ -432,39 +435,41 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
 void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command){
   fprintf(stdout, "[SERIALIZE]: sono dentro la funzione di serializzazione\n");
   buf_out[0] = mod_command;
-  buf_out = strcat(buf_out, "-");
-  buf_out = strcat(buf_out, buf_username);
+  buf_out[1] = '\0';
+  strncat(buf_out, "-", 1);
+  strncat(buf_out, buf_username, USERNAME_BUF_SIZE);
   fprintf(stdout, "[SERIALIZE]: maremma maiala\n");
-  char* a_flag_buf = (char*)malloc(sizeof(char));
-  *(a_flag_buf)= elem->a_flag;
-
 
   if(mod_command == DELETE){
-    buf_out = strcat(buf_out ,"-\n");
+    strncat(buf_out ,"-\n", 2);
     return;
   }
   else if (mod_command == NEW){
-    buf_out = strcat(buf_out, "-");
-    buf_out = strcat(buf_out, elem->client_ip);
-    buf_out = strcat(buf_out, "-");
-    buf_out = strcat(buf_out, a_flag_buf);
-    buf_out = strcat(buf_out, "-\n");
+    strncat(buf_out, "-", 2);
+    strncat(buf_out, elem->client_ip, INET_ADDRSTRLEN);
+    strncat(buf_out, "-", 2);
+
+    int s = strlen(buf_out);
+    buf_out[s] = elem->a_flag;
+    buf_out[s+1] = '\0';
+
+    strncat(buf_out, "-\n", 2);
     return;
   }
 
   else{
-    buf_out = strcat(buf_out, "-");
-    buf_out = strcat(buf_out, elem->client_ip);
-    buf_out = strcat(buf_out, "-");
+    strncat(buf_out, "-", 1);
+    strncat(buf_out, elem->client_ip, INET_ADDRSTRLEN);
+    strncat(buf_out, "-", 1);
 
-    if(*(a_flag_buf) == AVAILABLE){
-      buf_out = strcat(buf_out, "a");
-      buf_out = strcat(buf_out, "-\n");
+    if(elem->a_flag == AVAILABLE){
+      strncat(buf_out, "a", 1);
+      strncat(buf_out, "-\n", 2);
       return;
     }
     else{
-      buf_out = strcat(buf_out, "u");
-      buf_out = strcat(buf_out, "-\n");
+      strncat(buf_out, "u", 1);
+      strncat(buf_out, "-\n", 2);
       return;
     }
   }
@@ -484,27 +489,37 @@ void* connection_handler(void* arg){
   char* target_useraname_buf = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
 
   //get username
-  ret = get_and_check_username(args->socket, args->client_user_name);
+  while (1) {
+    ret = get_and_check_username(args->socket, args->client_user_name);
 
-  if(ret == -1){ //client closed endpoint
-    fprintf(stdout, "[CONNECTION THREAD]: closed endpoint\n");
-    message_buf[0] = DISCONNECT;
-    ret = execute_command(args, message_buf, NULL, NULL);
+    if (ret == 0) {//received username is available
+      break;
+    }
 
-    //close operations
-    free(target_useraname_buf);
+    if (ret == -2) {//received an unavailable username
+      continue;
+    }
 
-    ret = close(args->socket);
+    if(ret == -1){ //client closed endpoint
+      fprintf(stdout, "[CONNECTION THREAD]: closed endpoint\n");
+      message_buf[0] = DISCONNECT;
+      ret = execute_command(args, message_buf, NULL, NULL);
 
-    free(args->client_ip);
-    free(args->client_user_name);
+      //close operations
+      free(target_useraname_buf);
 
-    ret = sem_destroy(args->chandler_sync);
-    ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot destroy chandler_sync semaphore");
+      ret = close(args->socket);
 
-    free(args);
+      free(args->client_ip);
+      free(args->client_user_name);
 
-    pthread_exit(EXIT_SUCCESS);
+      ret = sem_destroy(args->chandler_sync);
+      ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot destroy chandler_sync semaphore");
+
+      free(args);
+
+      pthread_exit(EXIT_SUCCESS);
+    }
   }
 
   fprintf(stderr, "[CONNECTION THREAD %d]: allocazione user element da inserire nella lista\n", args->id);
@@ -550,13 +565,13 @@ void* connection_handler(void* arg){
       fprintf(stdout, "[CONNECTION THREAD]: closed endpoint\n");
       message_buf[0] = DISCONNECT;
 
-      //PERFORM REQUESTED ACTIVITY
       ret = execute_command(args, message_buf, element, target_useraname_buf);
       break;
     }
 
-    //HANDLE CLIENT EXIT
+    //PERFORM REQUESTED ACTIVITY
     ret = execute_command(args, message_buf, element, target_useraname_buf);
+    //HANDLE CLIENT EXIT
     if (ret < 0){
       break; //exit condition
     }
@@ -568,7 +583,6 @@ void* connection_handler(void* arg){
   ret = close(args->socket);
 
   free(args->client_ip);
-  free(args->client_user_name);
 
   ret = sem_destroy(args->chandler_sync);
   ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot destroy chandler_sync semaphore");
@@ -656,9 +670,10 @@ void* sender_routine(void* arg){
   ERROR_HELPER(ret, "[SENDER THREAD][ERROR]: cannot destroy sender_sync semaphore");
 
   free(args->client_ip);
+  fprintf(stdout, "[SENDER THREAD %d]: routine exit point\n", args->id);
   free(args);
 
-  fprintf(stdout, "[SENDER THREAD %d]: routine exit point\n", args->id);
+
   pthread_exit(EXIT_SUCCESS);
 }
 
