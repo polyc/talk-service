@@ -64,7 +64,7 @@ void free_user_list_element_value(gpointer data){
 
 //free hash table key
 void free_user_list_element_key(gpointer data){
-  free((char*)data);
+  if(data != NULL)free((char*)data);
   return;
 }
 
@@ -75,7 +75,7 @@ void free_mailbox_list_element_value(gpointer data){
 
 //free mailbox entry
 void free_mailbox(gpointer data){
-  free((char*)data);
+  if(data != NULL)free((char*)data);
   return;
 }
 
@@ -85,7 +85,7 @@ GHashTable* usr_list_init(){
 }
 
 GHashTable* mailbox_list_init(){
-  GHashTable* mailbox = g_hash_table_new_full(g_str_hash, g_str_equal, (GDestroyNotify)free_user_list_element_key, (GDestroyNotify)free_mailbox_list_element_value);
+  GHashTable* mailbox = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, (GDestroyNotify)free_mailbox_list_element_value);
   return mailbox;
 }
 
