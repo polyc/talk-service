@@ -11,11 +11,11 @@ typedef struct read_updates_args_s{
 #define MSG_LEN 256
 #define MAIN_CMD_LEN 9
 
-#define CMD_STRING "\n<<Client commands>>\n\n<<list:    display chat list>>\n<<connect: connect to client>>\n<<help:    display available commands>>\n<<exit:    exit program>>\n\n"
+#define CMD_STRING "\n<<Client commands>>\n\n<<list:    display chat list>>\n<<connect: connect to client>>\n<<help:    display available commands>>\n<<exit:    exit program>>\n<<clear:   clear screen>>\n\n"
 #define LIST       "list\n"
 #define CONNECT    "connect\n"
 #define HELP       "help\n"
-#define EXIT_C     "exit\n"
+#define CLEAR      "clear\n"
 
 //thread routines
 void* recv_updates(void *args);

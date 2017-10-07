@@ -570,7 +570,7 @@ void* recv_updates(void* args){
       }
 
       size_t len = strlen(buf);
-      char* queueBuf_elem = (char*)calloc(len+1, sizeof(char));
+      char* queueBuf_elem = (char*)calloc(len+1, sizeof(char)); //qui ho problemi di memory leak
 
       strcpy(queueBuf_elem, buf); //for \0 in the char*
 
@@ -621,6 +621,8 @@ int main(int argc, char* argv[]){
   GLOBAL_EXIT   = 0;
   USERNAME      = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
   USERNAME_CHAT = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
+
+  system("say welcome to talk service!");
 
   fprintf(stdout, "[MAIN] starting main process\n");
 
@@ -747,9 +749,14 @@ int main(int argc, char* argv[]){
       continue;
     }
 
-    else if(strcmp(buf_commands+1, EXIT_C)==0 && !GLOBAL_EXIT){ //per uscire dal programma
+    else if(strcmp(buf_commands+1, EXIT)==0 && !GLOBAL_EXIT){ //per uscire dal programma
       GLOBAL_EXIT = 1;
       break;
+    }
+
+    else if(strcmp(buf_commands+1, CLEAR)==0 && !GLOBAL_EXIT){
+      system("clear");
+      continue;
     }
 
     else{
