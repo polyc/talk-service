@@ -31,7 +31,7 @@ typedef struct push_entry_args_s{
 
 void* connection_handler(void* arg);
 void* sender_routine(void* arg);
-int get_and_check_username(int socket, char* username);
+int get_username(thread_args_t* args, usr_list_elem_t* new_element);
 void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command);
 usr_list_elem_t* getTargetElement(char* target_buf);
 void push_all(push_entry_args_t* args);

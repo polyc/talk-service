@@ -56,11 +56,11 @@ int connection_accepted(char* response){
 }
 
 //receive username from client and check if it's already used by another connected client
-int get_and_check_username(int socket, char* username){
+int get_username(thread_args_t* args, usr_list_elem_t* new_element){
   char* send_buf = (char*)calloc(3, sizeof(char)); //buffer used to send response to client
   while(1){
 
-    int ret = recv_msg(socket, username, USERNAME_BUF_SIZE);
+    int ret = recv_msg(args->socket, args->client_user_name, USERNAME_BUF_SIZE);
     if(ret == -1){
       free(send_buf);
       return -1; //endpoint closed by client
@@ -71,14 +71,28 @@ int get_and_check_username(int socket, char* username){
     ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot wait on user_list_mutex");
 
     //check if username is in user_list GHashTable
-    if(CONTAINS(user_list, username) == FALSE){
+    if(CONTAINS(user_list, args->client_user_name) == FALSE){
+
+      fprintf(stderr, "[CONNECTION THREAD %d]: allocazione user element da inserire nella lista\n", args->id);
+      //new user list element
+      new_element = (usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
+      //filling element struct with client data;
+      new_element->client_ip = args->client_ip;
+      new_element->a_flag = AVAILABLE;
+
+
+      //inserting user into hash-table userlist
+      ret = INSERT(user_list, (gpointer)args->client_user_name, (gpointer)new_element);
+      fprintf(stdout, "[CONNECTION THREAD %d]: elemento inserito con successo\n", args->id);
+
+
       ret = sem_post(&user_list_mutex);
       ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot post on user_list_mutex");
 
       send_buf[0] = AVAILABLE;
       send_buf[1] = '\n';
       send_buf[2] = '\0';
-      send_msg(socket, send_buf); //sending OK to client
+      send_msg(args->socket, send_buf); //sending OK to client
       break;
     }
     else{
@@ -88,12 +102,12 @@ int get_and_check_username(int socket, char* username){
       send_buf[0] = UNAVAILABLE;
       send_buf[1] = '\n';
       send_buf[2] = '\0';
-      send_msg(socket, send_buf);
-      memset(username, 0, USERNAME_BUF_SIZE);
+      send_msg(args->socket, send_buf);
+      memset(args->client_user_name, 0, USERNAME_BUF_SIZE);
 
     }
   }
-  fprintf(stdout, "[CONNECTION THREAD]: username getted\n");
+  fprintf(stdout, "[CONNECTION THREAD]: username got\n");
   return 0;
 }
 
@@ -181,6 +195,7 @@ void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_
   serialize_user_element(buf, (usr_list_elem_t*)value, (char*)key, NEW);
 
   send_msg(*((int*)user_data), buf); //(socket, buf);
+  free(buf);
   return;
 }
 
@@ -488,9 +503,11 @@ void* connection_handler(void* arg){
 
   char* target_useraname_buf = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
 
+  usr_list_elem_t* element = NULL;
+
   //get username
   while (1) {
-    ret = get_and_check_username(args->socket, args->client_user_name);
+    ret = get_username(args, element);
 
     if (ret == 0) {//received username is available
       break;
@@ -521,24 +538,6 @@ void* connection_handler(void* arg){
       pthread_exit(EXIT_SUCCESS);
     }
   }
-
-  fprintf(stderr, "[CONNECTION THREAD %d]: allocazione user element da inserire nella lista\n", args->id);
-
-  //new user list element
-  usr_list_elem_t* element = (usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
-  //filling element struct with client data;
-  element->client_ip = (char*)malloc(INET_ADDRSTRLEN*sizeof(char));
-  memcpy(element->client_ip, args->client_ip, strlen(args->client_ip)+1);
-  element->a_flag = AVAILABLE;
-
-
-  //inserting user into hash-table userlist
-  ret = sem_wait(&user_list_mutex);
-  ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on user_list_mutex");
-  ret = INSERT(user_list, (gpointer)args->client_user_name, (gpointer)element);
-  fprintf(stderr, "[CONNECTION THREAD %d]: elemento inserito con successo\n", args->id);
-  ret = sem_post(&user_list_mutex);
-  ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
 
   fprintf(stdout, "[CONNECTION THREAD %d]: %s\n",args->id, args->client_user_name);
 
@@ -603,7 +602,7 @@ void* sender_routine(void* arg){
   struct sockaddr_in rec_addr = {0};
   rec_addr.sin_family         = AF_INET;
   rec_addr.sin_port           = htons(CLIENT_THREAD_RECEIVER_PORT);
-  rec_addr.sin_addr.s_addr    = inet_addr(args->client_ip);
+  inet_pton(AF_INET ,args->client_ip, &(rec_addr.sin_addr.s_addr));
 
   fprintf(stderr, "[SENDER THREAD %d]: indirizzo client thread receiver inizializzato con successo\n", args->id);
 
@@ -737,9 +736,6 @@ int main(int argc, char const *argv[]) {
 
       fprintf(stderr, "[MAIN]: connessione accettata\n");
 
-      //parsing client ip in dotted form
-      char* client_ip_buf = inet_ntoa(client_addr->sin_addr);
-
       //semaphores for syncing chandler and sender threads
       sem_t* chandler_sync = (sem_t*)malloc(sizeof(sem_t));
       ret = sem_init(chandler_sync, 0, 0);
@@ -760,7 +756,9 @@ int main(int argc, char const *argv[]) {
       //arguments allocation
       char* client_user_name = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
       char* client_ip = (char*)malloc(INET_ADDRSTRLEN*sizeof(char));
-      memcpy(client_ip, client_ip_buf, strlen(client_ip_buf)+1);
+
+      //parsing client ip in dotted form
+      inet_ntop(AF_INET, &(client_addr->sin_addr), client_ip, INET_ADDRSTRLEN);
 
       thread_args_t* thread_args = (thread_args_t*)malloc(sizeof(thread_args_t));
       thread_args->socket               = client_desc;
@@ -778,8 +776,7 @@ int main(int argc, char const *argv[]) {
 
       sender_args->chandler_sync      = chandler_sync;
       sender_args->sender_sync        = sender_sync;
-      sender_args->client_ip          = (char*)malloc(sizeof(INET_ADDRSTRLEN));
-      memcpy(sender_args->client_ip, client_ip_buf, strlen(client_ip_buf)+1);
+      sender_args->client_ip          = client_ip;
       sender_args->mailbox            = mailbox_queue;
       sender_args->mailbox_key        = client_user_name;
       sender_args->id                 = thread_count;
