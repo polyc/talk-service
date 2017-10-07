@@ -69,7 +69,7 @@ void free_user_list_element_key(gpointer data){
 }
 
 void free_mailbox_list_element_value(gpointer data){
-  UNREF((GAsyncQueue*)data);
+  if(data != NULL)UNREF((GAsyncQueue*)data);
   return;
 }
 

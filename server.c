@@ -3,7 +3,7 @@
 #include <errno.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <stdio.h>               //FIXARE CASO CTRL-C DURANTE LA CHAT(SERVER NON AGGIORNA IL CLIENT RIMASTO IN CHAT)
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -581,8 +581,6 @@ void* connection_handler(void* arg){
 
   ret = close(args->socket);
 
-  free(args->client_ip);
-
   ret = sem_destroy(args->chandler_sync);
   ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot destroy chandler_sync semaphore");
 
@@ -660,15 +658,12 @@ void* sender_routine(void* arg){
     fprintf(stdout, "[SENDER THREAD %d]: message sended to client's reciever thread\n", args->id);
   }
   //exit operations
-  UNREF(args->mailbox);
-
   ret = close(socket_desc);
   ERROR_HELPER(ret, "Error closing socket_desc in sender routine");
 
   ret = sem_destroy(args->sender_sync);
   ERROR_HELPER(ret, "[SENDER THREAD][ERROR]: cannot destroy sender_sync semaphore");
 
-  free(args->client_ip);
   fprintf(stdout, "[SENDER THREAD %d]: routine exit point\n", args->id);
   free(args);
 
