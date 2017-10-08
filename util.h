@@ -9,5 +9,7 @@ void free_mailbox(gpointer data);
 GHashTable* usr_list_init();
 GHashTable* mailbox_list_init();
 GAsyncQueue* mailbox_queue_init();
+GAsyncQueue* thread_queue_init();
+GAsyncQueue* addresses_queue_init();
 
 #endif

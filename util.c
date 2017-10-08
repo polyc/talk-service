@@ -42,6 +42,9 @@ int recv_msg(int socket, char *buf, size_t buf_len, int timer) {
           //fprintf(stdout, "controllo EAGAIN\n");
           return -2;
         }
+        if(ret == -1 && errno == ECONNRESET){
+          return -1;
+        }
         if (ret == -1 && errno == EINTR) continue;
         ERROR_HELPER(ret, "Errore nella lettura da socket");
 
@@ -75,7 +78,7 @@ void free_mailbox_list_element_value(gpointer data){
 
 //free mailbox entry
 void free_mailbox(gpointer data){
-  if(data != NULL)free((char*)data);
+  free((char*)data);
   return;
 }
 
@@ -91,4 +94,12 @@ GHashTable* mailbox_list_init(){
 
 GAsyncQueue* mailbox_queue_init(){
   return g_async_queue_new_full((GDestroyNotify) free_mailbox);
+}
+
+GAsyncQueue* thread_queue_init(){
+  return g_async_queue_new();
+}
+
+GAsyncQueue* addresses_queue_init(){
+  return g_async_queue_new();
 }
