@@ -1,3 +1,5 @@
+#include "common.h"
+
 #define MAX_CONN_QUEUE 5
 #define SERVER_QUIT "QUIT"
 #define MESSAGE_SIZE USERNAME_BUF_SIZE + 3
@@ -10,7 +12,6 @@ typedef struct thread_args_s{
   sem_t* chandler_sync;
   sem_t* sender_sync;
   char* mailbox_key;//key for mailbox hash table
-  int id;
 } thread_args_t;
 
 typedef struct sender_thread_args_s{
@@ -19,7 +20,6 @@ typedef struct sender_thread_args_s{
   char* client_ip;
   GAsyncQueue* mailbox;//mailbox for message received from chandlers
   char* mailbox_key;
-  int id;
 }sender_thread_args_t;
 
 typedef struct push_entry_args_s{
@@ -29,6 +29,7 @@ typedef struct push_entry_args_s{
 
 //void create_user_list_element(usr_list_elem_t* element, char* ip, thread_args_t* args, char* buf);
 
+void intHandler();
 void* connection_handler(void* arg);
 void* sender_routine(void* arg);
 int get_username(thread_args_t* args, usr_list_elem_t* new_element);
