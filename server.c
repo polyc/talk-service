@@ -164,9 +164,9 @@ void remove_entry(char* elem_to_remove, char* mailbox_to_remove){
 void push_entry(gpointer key, gpointer value, gpointer user_data){
   push_entry_args_t* args = (push_entry_args_t*)user_data;
 
-  if(strcmp((char*)key, (char*)(args->sender_username)) != 0){
+  if(strcmp((char*)key, (char*)(args->sender_username))){
     char* message = (char*)calloc(MSG_LEN, 1);
-    memcpy(message, args->message, MSG_LEN);
+    strncpy(message, args->message, MSG_LEN);
 
     GAsyncQueue* ref_value = REF((GAsyncQueue*)value);
     PUSH(ref_value, (gpointer)message);
@@ -240,11 +240,12 @@ void notify(char* message_buf, char* element_username, char* mod_command, usr_li
 int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* element_to_update, char* target_buf){
 
   int ret = 0;
+  int size_buf;
 
   //parsing command
   char message_type = message_buf[0];
   char mod_command;
-  int size_buf;
+
 
   //status variables
   GAsyncQueue* target_mailbox;
@@ -305,13 +306,16 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
     case CONNECTION_REQUEST :
       parse_username(message_buf, target_buf, CONNECTION_REQUEST);
 
+      p_args = (push_entry_args_t*)malloc(sizeof(push_entry_args_t));
+
       //check if parsed username is connected to server
       ret = sem_wait(&user_list_mutex);
       ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on user_list_mutex");
 
       usr_list_elem_t* target = (usr_list_elem_t*)LOOKUP(user_list, target_buf);
 
-      if(target != NULL && target->a_flag == AVAILABLE){ //if true, send CONNECTION_REQUEST to target
+      //if true, send CONNECTION_REQUEST to target
+      if(target != NULL && strcmp(target_buf, args->client_user_name) && target->a_flag == AVAILABLE){
         ret = sem_post(&user_list_mutex);
         ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on user_list_mutex");
 
@@ -330,25 +334,26 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
         //---push connection request in target mailbox---
         ret = sem_wait(&mailbox_list_mutex);
         ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on mailbox_list_mutex");
+
         //search for target mailbox
         target_mailbox = NULL;
         value = &target_mailbox;
         ret = g_hash_table_lookup_extended(mailbox_list, (gconstpointer)target_buf, NULL, (gpointer*)value);
         //////////////////////////
+
+        p_args->message = message_buf;
+        p_args->sender_username = args->client_user_name;
+        push_entry(target_buf, target_mailbox, p_args);  //push connection request
+
         ret = sem_post(&mailbox_list_mutex);
         ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on mailbox_list_mutex");
 
         fprintf(stdout, "[CONNECTION THREAD]: MESSAGE = %s\n", message_buf);
 
-        p_args = (push_entry_args_t*)malloc(sizeof(push_entry_args_t));
-        p_args->message = message_buf;
-        p_args->sender_username = args->client_user_name;
-
-        push_entry(target_buf, target_mailbox, p_args);  //push connection request
         free(p_args);
-
         return 0;
       }
+
       else{//unavailable or not existent
 
         ret = sem_post(&user_list_mutex);
@@ -357,8 +362,34 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
         message_buf[0] = CONNECTION_RESPONSE;
         message_buf[1] = 'n';
         message_buf[2] = '\n';
-        send_msg(args->socket, message_buf); //send "no" to this client
+        message_buf[3] = '\0';
 
+        ret = sem_wait(&mailbox_list_mutex);
+        ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on mailbox_list_mutex");
+        //search for target mailbox
+        target_mailbox = NULL;
+        value = &target_mailbox;
+        ret = g_hash_table_lookup_extended(mailbox_list, (gconstpointer)args->client_user_name, NULL, (gpointer*)value);
+        //////////////////////////
+
+        p_args->message = message_buf;
+
+        if (strcmp(target_buf, args->client_user_name) == 0) {
+          //per evitare il blocco della notifica a se stesso
+          p_args->sender_username = "-";
+          push_entry(target_buf, target_mailbox, p_args);  //push connection request
+        }
+        else{
+          p_args->sender_username = args->client_user_name;
+          push_entry(target_buf, target_mailbox, p_args);  //push connection request
+        }
+
+        ret = sem_post(&mailbox_list_mutex);
+        ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on mailbox_list_mutex");
+
+        fprintf(stdout, "[CONNECTION THREAD]: MESSAGE = %s\n", message_buf);
+
+        free(p_args);
         return 0;
       }
 
