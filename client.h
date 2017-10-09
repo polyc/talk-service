@@ -25,6 +25,7 @@ void* read_updates(void* args);
 int get_username(char* username, int socket);
 static void print_userList(gpointer key, gpointer elem, gpointer data);
 GHashTable* usr_list_init();
+void _initSignals();
 void intHandler();
 void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command);
 void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName, char* mod_command);

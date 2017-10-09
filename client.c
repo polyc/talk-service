@@ -28,18 +28,14 @@ GHashTable* user_list;
 char* USERNAME;
 char* USERNAME_CHAT;
 char* buf_commands;
-//char* available;
-//char* unavailable;
-char* disconnect;
 int   IS_CHATTING;  // 0 se non connesso 1 se connesso
-int   GLOBAL_EXIT;  // 1 se bisogna interrompere il programma
+int   WAITING_RESPONSE;
+int   GLOBAL_EXIT;  // 1 se bisogna interrompere il programma 0 altrimenti
 
 
-void intHandler(){
+void sigHandler(int sig){
 
-  fprintf(stdout, "\n\n<<<<< You pressed CTRL-C preparing to exit program>>>>>\n\n");
   GLOBAL_EXIT = 1;
-
   return;
 
 }
@@ -68,6 +64,51 @@ static void print_userList(gpointer key, gpointer elem, gpointer data){
   fprintf(stdout, "[PRINT_USERLIST]###############################################\n");
   fflush(stdout);
   return;
+}
+
+void _initSignals(){
+
+  int ret;
+
+  //setting signal handler and signal mask
+  sigset_t mask1;
+  ret = sigfillset(&mask1);
+  ERROR_HELPER(ret, "[MAIN] Error in sigfillset function");
+
+  struct sigaction sigint_act;
+  sigint_act.sa_mask    = mask1;
+  sigint_act.sa_flags   = 0;
+  sigint_act.sa_handler = sigHandler;
+
+  ret = sigaction(SIGINT, &sigint_act, NULL);
+  ERROR_HELPER(ret, "[MAIN] Error in sigaction function");
+
+  sigset_t mask2;
+  ret = sigfillset(&mask2);
+  ERROR_HELPER(ret, "[MAIN] Error in sigfillset function");
+
+  struct sigaction sigpipe_act;
+  sigpipe_act.sa_mask = mask2;
+  sigpipe_act.sa_flags = 0;
+  sigpipe_act.sa_handler = sigHandler;
+
+  ret = sigaction(SIGPIPE, &sigpipe_act, NULL);
+  ERROR_HELPER(ret, "[MAIN] Error in sigaction function");
+
+  sigset_t mask3;
+  ret = sigfillset(&mask3);
+  ERROR_HELPER(ret, "[MAIN] Error in sigfillset function");
+
+  struct sigaction sigterm_act;
+  sigpipe_act.sa_mask = mask3;
+  sigpipe_act.sa_flags = 0;
+  sigpipe_act.sa_handler = sigHandler;
+
+  ret = sigaction(SIGTERM, &sigpipe_act, NULL);
+  ERROR_HELPER(ret, "[MAIN] Error in sigaction function");
+
+  return;
+
 }
 
 void list_command(){
@@ -108,6 +149,8 @@ void connect_to(int socket, char* target_client){
 
   int ret;
 
+  WAITING_RESPONSE = 1;
+
   fprintf(stdout, "[MAIN] Connect to: ");
 
   target_client[0] = CONNECTION_REQUEST;
@@ -124,6 +167,8 @@ void connect_to(int socket, char* target_client){
   ret = sem_wait(&wait_response);
   ERROR_HELPER(ret, "[MAIN] Error in sem_wait wait_response");
 
+  WAITING_RESPONSE = 0;
+
   return;
 }
 
@@ -138,7 +183,7 @@ void responde(int socket){
       IS_CHATTING = 0;
     }
 
-    strcpy(buf_commands+2, USERNAME_CHAT); //USERNAME_CHAT o USERNAME...CONTROLLARE!!
+    strncpy(buf_commands+2, USERNAME_CHAT, strlen(USERNAME_CHAT)); //USERNAME_CHAT o USERNAME...CONTROLLARE!!
     buf_commands[strlen(buf_commands)] = '\n';
     buf_commands[strlen(buf_commands)+1] = '\0';
 
@@ -189,9 +234,10 @@ int get_username(char* username, int socket){
 
   //sending buffer init data for user list
   //creating buffer for username and availability flag
-  char* buf = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
+  char* buf = (char*)calloc(USERNAME_BUF_SIZE+1, sizeof(char));
   strncpy(buf, username, strlen(username));
-  buf[strlen(buf)] = '\n';
+  buf[strlen(buf)]   = '\n';
+  buf[strlen(buf)+1] = '\0'; //invalide write of size 1 ... dont know why
 
   //sending username to server
   send_msg(socket, buf);
@@ -199,19 +245,22 @@ int get_username(char* username, int socket){
   fprintf(stdout, "[GET_USERNAME] sent username [%s] to server\n", buf);
 
   //checking if username already in use
-  memset(buf, 0, USERNAME_BUF_SIZE);
+  memset(buf, 0, USERNAME_BUF_SIZE+1);
 
   ret = recv_msg(socket, buf, 2);
-  ERROR_HELPER(ret, "[GET_USERNAME] Error receiving username check from server");
+  ERROR_HELPER(ret, "[GET_USERNAME] Error receiving username check from server"); //forse bisogna aggiungere un timeout per questa receive
 
   fprintf(stdout, "[GET_USERNAME] Username available? [%c]\n", buf[0]);
 
   if(buf[0] == UNAVAILABLE){
     free(buf);
+    fflush(stdout);
     return 0; //username not ok
   }
 
   free(buf);
+  fflush(stdout);
+  username[strlen(username)-1] = '\0';
   return 1; //usrname ok
 }
 
@@ -401,7 +450,7 @@ void* read_updates(void* args){
 
       buf_commands[0] = CONNECTION_RESPONSE;
 
-      strcpy(USERNAME_CHAT, elem_buf+1);
+      strncpy(USERNAME_CHAT, elem_buf+1, strlen(elem_buf)-1);
 
       free(elem_buf);
 
@@ -413,7 +462,7 @@ void* read_updates(void* args){
 
       if(elem_buf[1] == 'y'){
 
-        strcpy(USERNAME_CHAT, elem_buf+2);
+        strncpy(USERNAME_CHAT, elem_buf+2, strlen(elem_buf)-2);
 
         fprintf(stdout, "[READ_UPDATES] Response from server is YES! You are now chatting with: %s\n", USERNAME_CHAT);
 
@@ -483,7 +532,7 @@ void* recv_updates(void* args){
   int ret;
 
   struct timeval timeout;
-  timeout.tv_sec  = 1;
+  timeout.tv_sec  = 2;
   timeout.tv_usec = 0;
 
   //socket descriptor for user list receiver thread
@@ -547,6 +596,8 @@ void* recv_updates(void* args){
   //buffer for recv_msg function
   char* buf = (char*)calloc(MSG_LEN, sizeof(char));
 
+  int count = 0;
+
   //receiving user list element from server
   while(1){
 
@@ -569,12 +620,15 @@ void* recv_updates(void* args){
         break;
       }
 
-      size_t len = strlen(buf);
-      char* queueBuf_elem = (char*)calloc(len+1, sizeof(char)); //qui ho problemi di memory leak
+      if(!GLOBAL_EXIT){
 
-      strcpy(queueBuf_elem, buf); //for \0 in the char*
+        size_t len = strlen(buf);
+        char* queueBuf_elem = (char*)calloc(len+1, sizeof(char));
 
-      PUSH(buf_modifications, (gpointer)queueBuf_elem);
+        strncpy(queueBuf_elem, buf, strlen(buf)); //for \0 in the char*
+
+        PUSH(buf_modifications, (gpointer)queueBuf_elem);
+      }
 
   } //end of while(1)
 
@@ -596,12 +650,18 @@ void* recv_updates(void* args){
   ret = close(usrl_recv_socket);
   ERROR_HELPER(ret, "[RECV_UPDATES] Cannot close usrl_recv_socket");
 
-
   fprintf(stderr, "[RECV_UPDATES] closed rec_socket and arg->socket succesfully\n");
 
   fprintf(stderr, "[RECV_UPDATES] exiting recv_updates\n");
 
-  fprintf(stderr, "[RECV_UPDATES] Server closed end-point press any key to exit\n");
+  fprintf(stderr, "[RECV_UPDATES] Press any key to exit\n"); //potrei mettere una variabile globale per il connect_to e far stampare solo se = 1
+
+  if(WAITING_RESPONSE){
+
+    //ublocking &wait_response
+    ret = sem_post(&wait_response);
+    ERROR_HELPER(ret, "[RECV_UPDATES] Error in sem_post on &wait_response semaphore");
+  }
 
   pthread_exit(NULL);
 
@@ -611,36 +671,26 @@ int main(int argc, char* argv[]){
 
   int ret;
 
-  struct sigaction act;
-  act.sa_handler = intHandler;
+  _initSignals();
 
-  ret = sigaction(SIGINT, &act, NULL);
-  ERROR_HELPER(ret, "[MAIN] Error in sigaction function");
+  IS_CHATTING      = 0; // non sono connesso a nessuno per adesso
+  GLOBAL_EXIT      = 0;
+  WAITING_RESPONSE = 0; // non aspetto nessuna risposta da server
+  USERNAME         = (char*)calloc(USERNAME_BUF_SIZE+1, sizeof(char));
+  USERNAME_CHAT    = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
 
-  IS_CHATTING   = 0; // non sono connesso a nessuno per adesso
-  GLOBAL_EXIT   = 0;
-  USERNAME      = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
-  USERNAME_CHAT = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
-
-  system("say welcome to talk service!");
+  //system("say welcome to talk service!");
 
   fprintf(stdout, "[MAIN] starting main process\n");
 
   //initializing GLibHashTable for user list
   user_list = usr_list_init();
 
-  //alocating buffers for availability
-  // ****non servono piu i buffer tanto ci pensa il server a vedere se sono collegato o meno****
-  //available   = (char*)calloc(3, sizeof(char));
-  //unavailable = (char*)calloc(3, sizeof(char));
-  disconnect  = (char*)calloc(3, sizeof(char));
+  //alocating buffers for disconnect
+  char* disconnect  = (char*)calloc(3, sizeof(char));
 
-  //copying availability commands into buffers
-  //strcpy(available,   "a\n");
-  //strcpy(unavailable, "u\n");
+  //copying disconnect command into buffers
   strcpy(disconnect,  "c\n");
-
-  //fprintf(stdout, "[MAIN][BUFF_TEST] %c, %c, %c", available[0], unavailable[0], disconnect[0]);
 
   //initializing semaphores
   init_semaphores();
@@ -657,9 +707,6 @@ int main(int argc, char* argv[]){
 
   fprintf(stdout, "[MAIN] created data structure for connection with server\n");
 
-
-  //recv_updates thread
-  //
   //creating and spawning user list receiver thread with parameters
   read_updates_args_t* thread_usrl_recv_args = (read_updates_args_t*)malloc(sizeof(read_updates_args_t));
 
@@ -692,15 +739,13 @@ int main(int argc, char* argv[]){
       break;
     }
     memset(USERNAME, 0, USERNAME_BUF_SIZE); //setting buffer to 0
-    //strcpy(USERNAME, "");
   }
 
-  USERNAME = strtok(USERNAME, "\n");
 
   fprintf(stdout, "[MAIN] got username: [%s]\n", USERNAME);
 
   buf_commands = (char*)calloc(MSG_LEN, sizeof(char));
-  buf_commands[0] = '-'; //orribile vedi se lo puoi cancellare
+  //buf_commands[0] = '-'; //orribile vedi se lo puoi cancellare
 
   char* user_buf = (char*)calloc(MSG_LEN, sizeof(char));
 
@@ -715,7 +760,7 @@ int main(int argc, char* argv[]){
     }
 
     else if(IS_CHATTING){
-      fprintf(stdout, "[MAIN] Enter message: ");
+      fprintf(stdout, "[MAIN]>>: ");
     }
     else{
       fprintf(stdout, "[MAIN] IMPUT COMMAND (help to display commands): ");
@@ -745,7 +790,8 @@ int main(int argc, char* argv[]){
     }
 
     else if(strcmp(buf_commands+1, HELP)==0 && !GLOBAL_EXIT){
-      display_commands();
+      display_commands(); //imbarazzante una funzione per stampare una stringa cazzo
+      memset(buf_commands,  0, MSG_LEN);
       continue;
     }
 
@@ -755,6 +801,7 @@ int main(int argc, char* argv[]){
     }
 
     else if(strcmp(buf_commands+1, CLEAR)==0 && !GLOBAL_EXIT){
+      memset(buf_commands,  0, MSG_LEN);
       system("clear");
       continue;
     }
@@ -763,7 +810,9 @@ int main(int argc, char* argv[]){
       if(GLOBAL_EXIT){
         break;
       }
-      fprintf(stdout, "\n<< wrong input >>\n\n");
+      fprintf(stdout, "\n>>command not found\n");
+      display_commands();
+      memset(buf_commands,  0, MSG_LEN);
     }
 
   }
