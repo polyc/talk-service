@@ -18,7 +18,6 @@ typedef struct sender_thread_args_s{
   sem_t* chandler_sync;//sync between chandlers and senders
   sem_t* sender_sync;
   char* client_ip;
-  GAsyncQueue* mailbox;//mailbox for message received from chandlers
   char* mailbox_key;
 }sender_thread_args_t;
 
