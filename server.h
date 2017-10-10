@@ -9,14 +9,14 @@ typedef struct thread_args_s{
   int socket;
   char* client_ip;
   char* client_user_name; //key for userlist hash table
-  sem_t* chandler_sync;
-  sem_t* sender_sync;
+  //sem_t* chandler_sync;
+  //sem_t* sender_sync;
   char* mailbox_key;//key for mailbox hash table
 } thread_args_t;
 
 typedef struct sender_thread_args_s{
-  sem_t* chandler_sync;//sync between chandlers and senders
-  sem_t* sender_sync;
+  sem_t* sender_stop;//termination notify
+  sem_t* sender_sync;//sync between chandlers and senders
   char* client_ip;
   char* mailbox_key;
 }sender_thread_args_t;

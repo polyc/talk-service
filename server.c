@@ -470,25 +470,9 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
         notify(message_buf, target_buf, &mod_command, element);
       }
 
-      //notify sender thread the termination condition
-      ret = sem_wait(args->chandler_sync);
-      ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot wait on chandler_sync");
-
-      //wait acknowlwdgement from sender thread
-      ret = sem_wait(args->sender_sync);
-      ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot wait on chandler_sync");
-
-      ret = sem_destroy(args->sender_sync);
-      ERROR_HELPER(ret, "[SENDER THREAD][ERROR]: cannot destroy sender_sync semaphore");
-      free(args->sender_sync);
-
-      ret = sem_destroy(args->chandler_sync);
-      ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot destroy chandler_sync semaphore");
-      free(args->chandler_sync);
 
       //delete entry from hastables
       remove_entry(args->client_user_name, args->mailbox_key);
-
 
       fprintf(stdout, "[CONNECTION THREAD]: disconnect command processed\n");
       return -1;
@@ -561,9 +545,9 @@ void* connection_handler(void* arg){
 
   //we enable SO_RCVTIMEO so that recv function will not be blocking
   ret = setsockopt(args->socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout));
-  ERROR_HELPER(ret, "[RECV_UPDATES] Cannot set SO_RCVTIMEO option");
+  ERROR_HELPER(ret, "[CONENCTION THREAD] Cannot set SO_RCVTIMEO option");
 
-  //get username
+  //get username while
   while (1) {
     ret = get_username(args, element);
 
@@ -577,17 +561,7 @@ void* connection_handler(void* arg){
 
     if(ret == -1){ //client closed endpoint or server killed
 
-      //unlock sender thread
-      ret = sem_post(args->chandler_sync);
-      ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot post on chandler_sync");
-
-      //wait for sender thread init
-      ret = sem_wait(args->sender_sync);
-      ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot wait on chandler_sync");
-
       fprintf(stdout, "[CONNECTION THREAD]: closed endpoint or server killed\n");
-      message_buf[0] = DISCONNECT;
-      ret = execute_command(args, message_buf, NULL, NULL);
 
       //close operations
       free(target_useraname_buf);
@@ -600,15 +574,6 @@ void* connection_handler(void* arg){
 
       free(args->client_ip);
       free(args->client_user_name);
-
-      ret = sem_destroy(args->sender_sync);
-      ERROR_HELPER(ret, "[SENDER THREAD][ERROR]: cannot destroy sender_sync semaphore");
-      free(args->sender_sync);
-
-      ret = sem_destroy(args->chandler_sync);
-      ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot destroy chandler_sync semaphore");
-      free(args->chandler_sync);
-
       free(args);
 
       pthread_exit(EXIT_SUCCESS);
@@ -617,15 +582,38 @@ void* connection_handler(void* arg){
 
   fprintf(stdout, "[CONNECTION THREAD]: %s\n", args->client_user_name);
 
-  //unlock sender thread
-  ret = sem_post(args->chandler_sync);
-  ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot post on chandler_sync");
+  //SEMAPHORES TO SYNC WITH AND STOP SENDER THREAD
+  sem_t* sender_sync = (sem_t*)malloc(sizeof(sem_t));
+  ret = sem_init(sender_sync, 0, 0);
+  ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot init sender_sync sempahore");
+
+  sem_t* sender_stop = (sem_t*)malloc(sizeof(sem_t));
+  ret = sem_init(sender_stop, 0, 1);
+  ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot init sender_stop sempahore");
+
+  //sender thread args
+  //arguments allocation
+  sender_thread_args_t* sender_args = (sender_thread_args_t*)malloc(sizeof(sender_thread_args_t));
+
+  sender_args->sender_stop      = sender_stop;
+  sender_args->sender_sync        = sender_sync;
+  sender_args->client_ip          = args->client_ip;
+  sender_args->mailbox_key        = args->client_user_name;
+
+  fprintf(stderr, "[CONNECTION THREAD]: preparati argomenti per il sender thread\n");
+
+  pthread_t thread_sender;
+  ret = pthread_create(&thread_sender, NULL, sender_routine, (void*)sender_args);
+  PTHREAD_ERROR_HELPER(ret, "[CONNECTION THREAD]: Could not create sender thread");
+
+  fprintf(stderr, "[CONNECTION THREAD]: creato sender thread\n");
+
   //wait for sender thread init
-  ret = sem_wait(args->sender_sync);
-  ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot wait on chandler_sync");
+  ret = sem_wait(sender_sync);
+  ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot wait on sender_sync");
 
 
-  //pushing updates to mailboxes of connected clients
+  //notify connected clients new client arrival
   char* message = (char*)calloc(MSG_LEN, sizeof(char));
   mod_command[0] = NEW;
   notify(message, args->client_user_name, mod_command, element);
@@ -675,18 +663,27 @@ void* connection_handler(void* arg){
     }
   }
 
-  //exit operations
+  //EXIT OPERATIONS
+
+  //notify sender thread must stop
+  ret = sem_wait(sender_stop);
+  ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot wait on sender_stop");
+
+
   free(target_useraname_buf);
   free(mod_command);
   free(message_buf);
 
-  ret = sem_destroy(args->sender_sync);
-  if(ret == 0)free(args->sender_sync);
+  ret = pthread_join(thread_sender, NULL);
+
+  ret = sem_destroy(sender_sync);
+  ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot destroy sender_sync semaphore");
+  free(sender_sync);
 
 
-  ret = sem_destroy(args->chandler_sync);
-  if(ret == 0)free(args->chandler_sync);
-
+  ret = sem_destroy(sender_stop);
+  ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot destroy sender_stop semaphore");
+  free(sender_stop);
 
   ret = close(args->socket);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot close socket");
@@ -717,12 +714,6 @@ void* sender_routine(void* arg){
   ERROR_HELPER(ret, "Error trying to connect to client receiver thread");
 
   fprintf(stderr, "[SENDER THREAD]: conneso al receiver thread\n");
-  ret = sem_wait(args->chandler_sync);//aspetto che cHandler abbia inserito i dati nella userlist
-  ERROR_HELPER(ret, "[SENDER THREAD]: cannot wait on chandler_sync semaphore");
-
-
-  //referring mailbox
-  //GAsyncQueue* my_mailbox = REF(args->mailbox);
 
   //mailbox init
   GAsyncQueue* mailbox_queue = mailbox_queue_init();
@@ -737,13 +728,10 @@ void* sender_routine(void* arg){
   ret = sem_post(&mailbox_list_mutex);
   ERROR_HELPER(ret, "[SENDER THREAD]: Could not wait on mailbox_list semaphore");
 
-  //reinitialize semphore for termination condition
-  ret = sem_init(args->chandler_sync, 0, 1);
-  ERROR_HELPER(ret, "[MAIN]:cannot init sender_sync sempahore");
 
   //unlock chandler thread
   ret = sem_post(args->sender_sync);
-  ERROR_HELPER(ret, "[SENDER THREAD]: cannot post on chandler_sync semaphore");
+  ERROR_HELPER(ret, "[SENDER THREAD]:cannot post sender_sync sempahore");
 
   //sending list to client receiver thread
   ret = sem_wait(&user_list_mutex);
@@ -759,12 +747,12 @@ void* sender_routine(void* arg){
   int sem_value;
   //GET UPDATES FROM PERSONAL MAILBOX
   while(1){
-    sem_getvalue(args->chandler_sync, &sem_value);
+    ret = sem_getvalue(args->sender_stop, &sem_value);
+    if(!(ret == -1 && errno == EINVAL)){//semaforo distrutto da cHandler
+      ERROR_HELPER(ret, "[SENDER THREAD]:cannot get value of chandler_sync sempahore");
+    }
     //check termination condition
     if (sem_value == 0) {
-      ret = sem_post(args->sender_sync);//send acknowlwdgement to chandler thread
-      ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot wait on chandler_sync");
-
       fprintf(stdout, "[SENDER THREAD]: terminating sender routine\n");
       break;
     }
@@ -897,16 +885,6 @@ int main(int argc, char const *argv[]) {
 
       PUSH(addresses_queue, client_addr);
 
-      //semaphores for syncing chandler and sender threads
-      sem_t* chandler_sync = (sem_t*)malloc(sizeof(sem_t));
-      ret = sem_init(chandler_sync, 0, 0);
-      ERROR_HELPER(ret, "[MAIN]:cannot init chandler_sync sempahore");
-
-      sem_t* sender_sync = (sem_t*)malloc(sizeof(sem_t));
-      ret = sem_init(sender_sync, 0, 0);
-      ERROR_HELPER(ret, "[MAIN]:cannot init sender_sync sempahore");
-
-
 
       //thread spawning
       //*********************
@@ -923,22 +901,7 @@ int main(int argc, char const *argv[]) {
       thread_args->socket               = client_desc;
       thread_args->client_user_name     = client_user_name;
       thread_args->client_ip            = client_ip;
-      thread_args->chandler_sync        = chandler_sync;
-      thread_args->sender_sync          = sender_sync;
       thread_args->mailbox_key          = client_user_name;
-
-
-      //sender thread args
-      //arguments allocation
-      sender_thread_args_t* sender_args = (sender_thread_args_t*)malloc(sizeof(sender_thread_args_t));
-
-      sender_args->chandler_sync      = chandler_sync;
-      sender_args->sender_sync        = sender_sync;
-      sender_args->client_ip          = client_ip;
-      sender_args->mailbox_key        = client_user_name;
-
-      fprintf(stderr, "[MAIN]: preparati argomenti per il sender thread\n");
-
 
       //connection handler thread spawning
       pthread_t thread_client; //= (pthread_t*)malloc(sizeof(pthread_t));
@@ -948,15 +911,8 @@ int main(int argc, char const *argv[]) {
 
       fprintf(stderr, "[MAIN]: creato connection thread\n");
 
-      //sender thread spawning
-      pthread_t thread_sender; //= (pthread_t*)malloc(sizeof(pthread_t));
-      ret = pthread_create(&thread_sender, NULL, sender_routine, (void*)sender_args);
-      PTHREAD_ERROR_HELPER(ret, "Could not create sender thread");
-      PUSH(thread_queue, &thread_sender);
 
-      fprintf(stderr, "[MAIN]: creato sender thread\n");
-
-      //new buffer for new incoming connection
+      //new buffer for incoming connection
       client_addr = calloc(1, sizeof(struct sockaddr_in));
 
       fprintf(stderr, "[MAIN]: fine loop di accettazione connessione in ingresso, inizio nuova iterazione\n");
@@ -967,7 +923,6 @@ int main(int argc, char const *argv[]) {
     //free threads
     pthread_t*  t;
     while((t = POP(thread_queue, POP_TIMEOUT)) != NULL){
-      fprintf(stdout, "DENTRO JOIN\n");
       ret = pthread_join(*t, NULL);
     }
 
@@ -977,6 +932,7 @@ int main(int argc, char const *argv[]) {
       free(addr);
     }
 
+    free(client_addr);
     UNREF(addresses_queue);
     UNREF(thread_queue);
     DESTROY(user_list);
