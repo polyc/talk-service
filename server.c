@@ -72,12 +72,21 @@ int connection_accepted(char* response){
 //receive username from client and check if it's already used by another connected client
 int get_username(thread_args_t* args, usr_list_elem_t* new_element){
   char* send_buf = (char*)calloc(3, sizeof(char)); //buffer used to send response to client
+  int inactivity_counter = 0;
   while(!GLOBAL_EXIT){
 
     int ret = recv_msg(args->socket, args->client_user_name, USERNAME_BUF_SIZE);
 
     if(ret == -2){//EAGAIN case
-      continue;
+      if(inactivity_counter == MAX_GET_USERNAME_INACTIVITY){
+        fprintf(stdout, "[CONNECTION THREAD]: client inactive, killing threads\n");
+        free(send_buf);
+        return -1;
+      }
+      else{
+        inactivity_counter++;
+        continue;
+      }
     }
 
     if(ret == -1){
@@ -152,20 +161,16 @@ void remove_entry(char* elem_to_remove, char* mailbox_to_remove){
   //removing from mailboxlist
   int ret = sem_wait(&mailbox_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: could not wait on mailbox_list_mutex semaphore");
-
   removed = REMOVE(mailbox_list, mailbox_to_remove);
   fprintf(stdout, "%d\n", removed);
-
   ret = sem_post(&mailbox_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: could not post on mailbox_list_mutex semaphore");
 
   //removing from userlist
   ret = sem_wait(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: could not wait on user_list_mutex_list semaphore");
-
   removed = REMOVE(user_list, elem_to_remove); //remove entry
   fprintf(stdout, "%d\n", removed);
-
   ret = sem_post(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: could not post on user_list_mutex_list semaphore");
 
@@ -478,13 +483,6 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
       ret = sem_wait(args->chandler_sync);
       ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot wait on chandler_sync");
 
-      /*GAsyncQueue* mailbox = (GAsyncQueue*)LOOKUP(mailbox_list, args->mailbox_key);
-      char* term_message = (char*)malloc(sizeof(char)* MSG_LEN);
-      term_message = "term";
-      GAsyncQueue* my_mailbox = REF(mailbox);
-      PUSH(my_mailbox, (gpointer)term_message);
-      UNREF(my_mailbox);*/
-
       //delete entry from hastables
       remove_entry(args->client_user_name, args->mailbox_key);
 
@@ -547,7 +545,7 @@ void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_user
 void* connection_handler(void* arg){
   thread_args_t* args = (thread_args_t*)arg;
 
-  int ret;
+  int ret, inactivity_counter = 0;
 
   char* mod_command = (char*)malloc(sizeof(char));
 
@@ -592,6 +590,7 @@ void* connection_handler(void* arg){
       free(target_useraname_buf);
       free(mod_command);
       free(message_buf);
+      free(element);
 
       ret = close(args->socket);
       ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot close socket");
@@ -627,7 +626,25 @@ void* connection_handler(void* arg){
 
     //EAGAIN case
     if(ret == -2){
-      continue;
+      if(inactivity_counter == MAX_INACTIVITY){
+        ret = sem_wait(&user_list_mutex);
+        ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot wait on user_list_mutex");
+
+        if(element->a_flag != UNAVAILABLE){ //se non è in chat
+          ret = sem_post(&user_list_mutex);
+          ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot post on user_list_mutex");
+
+          fprintf(stdout, "[CONNECTION THREAD]: client inactive, killing threads\n");
+          message_buf[0] = DISCONNECT;
+
+          ret = execute_command(args, message_buf, element, target_useraname_buf);
+          break;
+        }
+      }
+      else{
+          inactivity_counter++;
+          continue;
+      }
     }
 
     if(ret == -1){ //socket is cloesed by client
@@ -639,6 +656,7 @@ void* connection_handler(void* arg){
     }
 
     //PERFORM REQUESTED ACTIVITY
+    inactivity_counter = 0; //reset counter because is going to be performed an activity
     ret = execute_command(args, message_buf, element, target_useraname_buf);
     //HANDLE CLIENT EXIT
     if (ret < 0){

@@ -1,8 +1,8 @@
 #include "common.h"
 
 #define MAX_CONN_QUEUE 5
-#define SERVER_QUIT "QUIT"
-#define MESSAGE_SIZE USERNAME_BUF_SIZE + 3
+#define MAX_GET_USERNAME_INACTIVITY 120
+#define MAX_INACTIVITY 600
 
 //data structure passed to threads on creation
 typedef struct thread_args_s{
