@@ -28,9 +28,9 @@ GHashTable* user_list;
 char* USERNAME;
 char* USERNAME_CHAT;
 char* buf_commands;
-int   IS_CHATTING;  // 0 se non connesso 1 se connesso
-int   WAITING_RESPONSE;
-int   GLOBAL_EXIT;  // 1 se bisogna interrompere il programma 0 altrimenti
+int   IS_CHATTING;      // 0 se non connesso 1 se connesso
+int   WAITING_RESPONSE; // 0 se non sta aspettando una risposta dal server 1 altrimenti
+int   GLOBAL_EXIT;      // 1 se bisogna interrompere il programma 0 altrimenti
 
 
 void sigHandler(int sig){
@@ -38,6 +38,76 @@ void sigHandler(int sig){
   GLOBAL_EXIT = 1;
   return;
 
+}
+
+void _initSignals(){
+
+  int ret;
+
+  //SIGINT
+  sigset_t mask1;
+  ret = sigfillset(&mask1);
+  ERROR_HELPER(ret, "[MAIN] Error in sigfillset function");
+
+  struct sigaction sigint_act;
+  sigint_act.sa_mask    = mask1;
+  sigint_act.sa_flags   = 0;
+  sigint_act.sa_handler = sigHandler;
+
+  ret = sigaction(SIGINT, &sigint_act, NULL);
+  ERROR_HELPER(ret, "[MAIN] Error in sigaction function");
+
+  //SIGPIPE
+  sigset_t mask2;
+  ret = sigfillset(&mask2);
+  ERROR_HELPER(ret, "[MAIN] Error in sigfillset function");
+
+  struct sigaction sigpipe_act;
+  sigpipe_act.sa_mask = mask2;
+  sigpipe_act.sa_flags = 0;
+  sigpipe_act.sa_handler = sigHandler;
+
+  ret = sigaction(SIGPIPE, &sigpipe_act, NULL);
+  ERROR_HELPER(ret, "[MAIN] Error in sigaction function");
+
+  //SIGTERM
+  sigset_t mask3;
+  ret = sigfillset(&mask3);
+  ERROR_HELPER(ret, "[MAIN] Error in sigfillset function");
+
+  struct sigaction sigterm_act;
+  sigpipe_act.sa_mask = mask3;
+  sigpipe_act.sa_flags = 0;
+  sigpipe_act.sa_handler = sigHandler;
+
+  ret = sigaction(SIGTERM, &sigterm_act, NULL);
+  ERROR_HELPER(ret, "[MAIN] Error in sigaction function");
+
+  return;
+
+}
+
+void _initSemaphores(){
+
+  int ret;
+
+  fprintf(stdout, "[MAIN] initializing semaphores...\n");
+
+  //creating sempahore for listen function in usrl_liste_thread_routine for bind action
+  ret = sem_init(&sync_receiver, 0, 0);
+  ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_receiver semaphore");
+
+  //creating semaphore for connect_to function
+  ret = sem_init(&wait_response, 0, 0);
+  ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &wait_response semaphore");
+
+  //creating sempahore for mutual exlusion in userList
+  ret = sem_init(&sync_userList, 0, 1);
+  ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_userList semaphore");
+
+  fprintf(stdout, "[MAIN] semaphores initialized correctly\n");
+
+  return;
 }
 
 static void print_userList(gpointer key, gpointer elem, gpointer data){
@@ -64,51 +134,6 @@ static void print_userList(gpointer key, gpointer elem, gpointer data){
   fprintf(stdout, "[PRINT_USERLIST]###############################################\n");
   fflush(stdout);
   return;
-}
-
-void _initSignals(){
-
-  int ret;
-
-  //setting signal handler and signal mask
-  sigset_t mask1;
-  ret = sigfillset(&mask1);
-  ERROR_HELPER(ret, "[MAIN] Error in sigfillset function");
-
-  struct sigaction sigint_act;
-  sigint_act.sa_mask    = mask1;
-  sigint_act.sa_flags   = 0;
-  sigint_act.sa_handler = sigHandler;
-
-  ret = sigaction(SIGINT, &sigint_act, NULL);
-  ERROR_HELPER(ret, "[MAIN] Error in sigaction function");
-
-  sigset_t mask2;
-  ret = sigfillset(&mask2);
-  ERROR_HELPER(ret, "[MAIN] Error in sigfillset function");
-
-  struct sigaction sigpipe_act;
-  sigpipe_act.sa_mask = mask2;
-  sigpipe_act.sa_flags = 0;
-  sigpipe_act.sa_handler = sigHandler;
-
-  ret = sigaction(SIGPIPE, &sigpipe_act, NULL);
-  ERROR_HELPER(ret, "[MAIN] Error in sigaction function");
-
-  sigset_t mask3;
-  ret = sigfillset(&mask3);
-  ERROR_HELPER(ret, "[MAIN] Error in sigfillset function");
-
-  struct sigaction sigterm_act;
-  sigpipe_act.sa_mask = mask3;
-  sigpipe_act.sa_flags = 0;
-  sigpipe_act.sa_handler = sigHandler;
-
-  ret = sigaction(SIGTERM, &sigpipe_act, NULL);
-  ERROR_HELPER(ret, "[MAIN] Error in sigaction function");
-
-  return;
-
 }
 
 void list_command(){
@@ -216,7 +241,7 @@ int get_username(char* username, int socket){
     return 1;
   }
 
-  //checking if username has atleast 1 character
+  //checking if username has at least 1 character
   if(strlen(username)-1 == 0){ //because there is a \n got from fgets
     fprintf(stdout, "[GET_USERNAME] No username input\n");
     fflush(stdout);
@@ -301,7 +326,14 @@ void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command){
   }
   else{
 
-    REMOVE(user_list, (gpointer)buf_userName);
+    if(strcmp(buf_userName, USERNAME_CHAT)==0){
+      IS_CHATTING = 0;
+    }
+
+    ret = REMOVE(user_list, (gpointer)buf_userName);
+    if(!ret){
+      fprintf(stdout, "[UPDATE_LIST] Error in remove function\n");
+    }
 
     fprintf(stdout, "[UPDATE_LIST] removed entry [%s] in user list\n", buf_userName);
 
@@ -330,6 +362,12 @@ void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName,
 
   strncpy(buf_userName, buf+2, j-3);
   buf_userName[j-3] = '\0';
+
+  if(mod_command[0] == DELETE){
+    elem->client_ip = "";
+    elem->a_flag    = UNAVAILABLE;
+    return;
+  }
 
   fprintf(stdout, "[PARSE_ELEM_LIST] passed first strncpy()\n");
 
@@ -367,29 +405,6 @@ void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName,
 
   return;
 
-}
-
-void init_semaphores(){
-
-  int ret;
-
-  fprintf(stdout, "[MAIN] initializing semaphores...\n");
-
-  //creating sempahore for listen function in usrl_liste_thread_routine for bind action
-  ret = sem_init(&sync_receiver, 0, 0);
-  ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_receiver semaphore");
-
-  //creating semaphore for connect_to function
-  ret = sem_init(&wait_response, 0, 0);
-  ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &wait_response semaphore");
-
-  //creating sempahore for mutual exlusion in userList
-  ret = sem_init(&sync_userList, 0, 1);
-  ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_userList semaphore");
-
-  fprintf(stdout, "[MAIN] semaphores initialized correctly\n");
-
-  return;
 }
 
 void* read_updates(void* args){
@@ -433,12 +448,12 @@ void* read_updates(void* args){
 
       if(!strcmp(elem_buf+1,"exit")){
         IS_CHATTING = 0;
-        fprintf(stdout, "[Receiving chat] exit message received press ENTER to exit chat\n");
+        fprintf(stdout, ">> exit message received from [%s] press ENTER to exit chat\n", USERNAME_CHAT);
         memset(USERNAME_CHAT, 0, USERNAME_BUF_SIZE);
         continue;
       }
 
-      fprintf(stdout, "[Receiving chat] %s\n", elem_buf+1);
+      fprintf(stdout, "[%s]>> %s\n", USERNAME_CHAT, elem_buf+1);
       free(elem_buf);
       continue;
     }
@@ -596,8 +611,6 @@ void* recv_updates(void* args){
   //buffer for recv_msg function
   char* buf = (char*)calloc(MSG_LEN, sizeof(char));
 
-  int count = 0;
-
   //receiving user list element from server
   while(1){
 
@@ -671,6 +684,9 @@ int main(int argc, char* argv[]){
 
   int ret;
 
+  fprintf(stdout, "[MAIN] starting main process\n");
+
+  //arming signals
   _initSignals();
 
   IS_CHATTING      = 0; // non sono connesso a nessuno per adesso
@@ -679,21 +695,16 @@ int main(int argc, char* argv[]){
   USERNAME         = (char*)calloc(USERNAME_BUF_SIZE+1, sizeof(char));
   USERNAME_CHAT    = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
 
-  //system("say welcome to talk service!");
+  //initializing semaphores
+  _initSemaphores();
 
-  fprintf(stdout, "[MAIN] starting main process\n");
 
   //initializing GLibHashTable for user list
   user_list = usr_list_init();
 
-  //alocating buffers for disconnect
+  //buffer for disconnect
   char* disconnect  = (char*)calloc(3, sizeof(char));
-
-  //copying disconnect command into buffers
   strcpy(disconnect,  "c\n");
-
-  //initializing semaphores
-  init_semaphores();
 
   //socket descriptor to connect to server
   int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
@@ -732,7 +743,7 @@ int main(int argc, char* argv[]){
 
   fprintf(stdout, "[MAIN] connected to server\n");
 
-  //getting username from user   add max number of attempts
+  //getting username from user
   while(1){
     ret = get_username(USERNAME, socket_desc);
     if(ret==1){
@@ -741,12 +752,9 @@ int main(int argc, char* argv[]){
     memset(USERNAME, 0, USERNAME_BUF_SIZE); //setting buffer to 0
   }
 
-
   fprintf(stdout, "[MAIN] got username: [%s]\n", USERNAME);
 
   buf_commands = (char*)calloc(MSG_LEN, sizeof(char));
-  //buf_commands[0] = '-'; //orribile vedi se lo puoi cancellare
-
   char* user_buf = (char*)calloc(MSG_LEN, sizeof(char));
 
   //display commands for first time
@@ -760,7 +768,7 @@ int main(int argc, char* argv[]){
     }
 
     else if(IS_CHATTING){
-      fprintf(stdout, "[MAIN]>>: ");
+      fprintf(stdout, "[%s]>>: ", USERNAME);
     }
     else{
       fprintf(stdout, "[MAIN] IMPUT COMMAND (help to display commands): ");
@@ -837,13 +845,10 @@ int main(int argc, char* argv[]){
   free(buf_commands);
   free(user_buf);
   free(thread_usrl_recv_args);
-  //free(available);
-  //free(unavailable);
   free(disconnect);
 
   fprintf(stdout, "[MAIN] Destroying user list...\n");
   DESTROY(user_list);
-
 
   fprintf(stdout, "[MAIN] closing socket descriptors...\n");
 
@@ -852,7 +857,6 @@ int main(int argc, char* argv[]){
   ERROR_HELPER(ret, "[MAIN] Cannot close socket_desc");
 
   fprintf(stdout, "[MAIN] exiting main process\n\n");
-
 
   exit(EXIT_SUCCESS);
 
