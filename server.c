@@ -29,7 +29,7 @@ int GLOBAL_EXIT = 0;
 struct timeval timeout;
 
 void intHandler(){
-  fprintf(stdout, "\n\n<<<<< You pressed CTRL-C preparing to exit program>>>>>\n\n");
+  fprintf(stdout, "\n\n<<<<< preparing to exit program>>>>>\n\n");
   GLOBAL_EXIT = 1;
 }
 
@@ -94,7 +94,7 @@ int get_username(thread_args_t* args, usr_list_elem_t* new_element){
 
       fprintf(stderr, "[CONNECTION THREAD]: allocazione user element da inserire nella lista\n");
       //new user list element
-      new_element = (usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
+
       //filling element struct with client data;
       new_element->client_ip = args->client_ip;
       new_element->a_flag = AVAILABLE;
@@ -147,11 +147,20 @@ void update_availability(usr_list_elem_t* elem_to_update, char buf_command){
 
 //remove entries from hash tables when a client disconnects from server
 void remove_entry(char* elem_to_remove, char* mailbox_to_remove){
-
-  //removing from userlist
   gboolean removed;
 
-  int ret = sem_wait(&user_list_mutex);
+  //removing from mailboxlist
+  int ret = sem_wait(&mailbox_list_mutex);
+  ERROR_HELPER(ret, "[CONNECTION THREAD]: could not wait on mailbox_list_mutex semaphore");
+
+  removed = REMOVE(mailbox_list, mailbox_to_remove);
+  fprintf(stdout, "%d\n", removed);
+
+  ret = sem_post(&mailbox_list_mutex);
+  ERROR_HELPER(ret, "[CONNECTION THREAD]: could not post on mailbox_list_mutex semaphore");
+
+  //removing from userlist
+  ret = sem_wait(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: could not wait on user_list_mutex_list semaphore");
 
   removed = REMOVE(user_list, elem_to_remove); //remove entry
@@ -159,23 +168,6 @@ void remove_entry(char* elem_to_remove, char* mailbox_to_remove){
 
   ret = sem_post(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: could not post on user_list_mutex_list semaphore");
-
-  //if(removed == 0)
-    //ERROR_HELPER(-1, "[CONNECTION THREAD][REMOVING ENTRY]: remove entry failed");
-
-
-  //removing from mailboxlist
-  ret = sem_wait(&mailbox_list_mutex);
-  ERROR_HELPER(ret, "[CONNECTION THREAD]: could not wait on mailbox_list_mutex semaphore");
-
-  removed = REMOVE(mailbox_list, mailbox_to_remove);
-
-  ret = sem_post(&mailbox_list_mutex);
-  ERROR_HELPER(ret, "[CONNECTION THREAD]: could not post on mailbox_list_mutex semaphore");
-
-  //if(removed == 0)
-    //ERROR_HELPER(-1, "[CONNECTION THREAD][REMOVING ENTRY]: remove entry failed");
-
 
   fprintf(stdout, "[CONNECTION THREAD]: successfully removed entry on disconnect operation\n");
   return;
@@ -482,11 +474,16 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
         notify(message_buf, target_buf, &mod_command, element);
       }
 
-      //notify sender thread the termination condition
-      GAsyncQueue* mailbox = (GAsyncQueue*)LOOKUP(mailbox_list, args->mailbox_key);
+      //notify sender thread the termination condition and wait for sender thread acknowlwdgement
+      ret = sem_wait(args->chandler_sync);
+      ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot wait on chandler_sync");
+
+      /*GAsyncQueue* mailbox = (GAsyncQueue*)LOOKUP(mailbox_list, args->mailbox_key);
       char* term_message = (char*)malloc(sizeof(char)* MSG_LEN);
       term_message = "term";
-      PUSH(mailbox, (gpointer)term_message);
+      GAsyncQueue* my_mailbox = REF(mailbox);
+      PUSH(my_mailbox, (gpointer)term_message);
+      UNREF(my_mailbox);*/
 
       //delete entry from hastables
       remove_entry(args->client_user_name, args->mailbox_key);
@@ -559,7 +556,7 @@ void* connection_handler(void* arg){
 
   char* target_useraname_buf = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
 
-  usr_list_elem_t* element = NULL;
+  usr_list_elem_t* element = (usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
 
   //we enable SO_RCVTIMEO so that recv function will not be blocking
   ret = setsockopt(args->socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout));
@@ -601,9 +598,6 @@ void* connection_handler(void* arg){
 
       free(args->client_ip);
       free(args->client_user_name);
-
-      ret = sem_destroy(args->chandler_sync);
-      ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot destroy chandler_sync semaphore");
 
       free(args);
 
@@ -660,9 +654,6 @@ void* connection_handler(void* arg){
   ret = close(args->socket);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot close socket");
 
-  ret = sem_destroy(args->chandler_sync);
-  ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot destroy chandler_sync semaphore");
-
   free(args);
 
   pthread_exit(EXIT_SUCCESS);
@@ -692,19 +683,26 @@ void* sender_routine(void* arg){
   ret = sem_wait(args->chandler_sync);//aspetto che cHandler abbia inserito i dati nella userlist
   ERROR_HELPER(ret, "[SENDER THREAD]: cannot wait on chandler_sync semaphore");
 
+
+  //referring mailbox
+  //GAsyncQueue* my_mailbox = REF(args->mailbox);
+
+  //mailbox init
+  GAsyncQueue* mailbox_queue = mailbox_queue_init();
+
+  GAsyncQueue* my_mailbox = REF(mailbox_queue);
+
   //inserting mailbox in hash-table mailbox list
   ret = sem_wait(&mailbox_list_mutex);
   ERROR_HELPER(ret, "[SENDER THREAD]: could not wait on mailbox_list semaphore");
-
-  INSERT(mailbox_list, (gpointer)(args->mailbox_key), (gpointer)(args->mailbox));
+  INSERT(mailbox_list, (gpointer)(args->mailbox_key), (gpointer)(mailbox_queue));
   fprintf(stdout, "[SENDER THREAD]: inserted entry in mailbox_list\n");
-
   ret = sem_post(&mailbox_list_mutex);
   ERROR_HELPER(ret, "[SENDER THREAD]: Could not wait on mailbox_list semaphore");
 
-
-  //referring mailbox
-  GAsyncQueue* my_mailbox = REF(args->mailbox);
+  //reinitialize semphore for termination condition
+  ret = sem_init(args->chandler_sync, 0, 1);
+  ERROR_HELPER(ret, "[MAIN]:cannot init sender_sync sempahore");
 
   //unlock chandler thread
   ret = sem_post(args->sender_sync);
@@ -720,22 +718,26 @@ void* sender_routine(void* arg){
   ERROR_HELPER(ret, "[SENDER THREAD]: cannot wait on user_list_mutex");
   fprintf(stdout, "[SENDER THREAD]: sended list on first connection\n");
 
+  char* message;
+  int sem_value;
   //GET UPDATES FROM PERSONAL MAILBOX
   while(1){
-    char* message = (char*)POP(my_mailbox, POP_TIMEOUT);
+    sem_getvalue(args->chandler_sync, &sem_value);
+    fprintf(stdout, "%d\n", sem_value);
+    //check termination condition
+    if (sem_value == 0) {
+      fprintf(stdout, "[SENDER THREAD]: terminating sender routine\n");
+      break;
+    }
 
     if(GLOBAL_EXIT){
       fprintf(stdout, "[SENDER THREAD]: terminating sender routine\n");
-      if(message != NULL)free(message);
       break;
     }
+
+    message = (char*)POP(my_mailbox, POP_TIMEOUT);
 
     if(message == NULL)continue;
-
-    if (strcmp(message, "term") == 0) {
-      fprintf(stdout, "[SENDER THREAD]: terminating sender routine\n");
-      break;
-    }
 
     //sending message to client's receiver thread
     send_msg(socket_desc, message);
@@ -745,12 +747,18 @@ void* sender_routine(void* arg){
   }
   //exit operations
   UNREF(my_mailbox);
+  UNREF(mailbox_queue);
 
   ret = close(socket_desc);
   ERROR_HELPER(ret, "Error closing socket_desc in sender routine");
 
   ret = sem_destroy(args->sender_sync);
   ERROR_HELPER(ret, "[SENDER THREAD][ERROR]: cannot destroy sender_sync semaphore");
+  free(args->sender_sync);
+
+  ret = sem_destroy(args->chandler_sync);
+  ERROR_HELPER(ret, "[CONNECTION THREAD][ERROR]: cannot destroy chandler_sync semaphore");
+  free(args->chandler_sync);
 
   fprintf(stdout, "[SENDER THREAD]: routine exit point\n");
   free(args);
@@ -761,19 +769,33 @@ void* sender_routine(void* arg){
 
 int main(int argc, char const *argv[]) {
   int ret, server_desc, client_desc;
-  struct sigaction act;
+  struct sigaction actSIGINT, actSIGPIPE, actSIGHUP, actSIGTERM;
 
   timeout.tv_sec  = 1;
   timeout.tv_usec = 0;
 
   sigset_t sa_mask;
-  ret = sigemptyset(&sa_mask);
 
   ret = sigfillset(&sa_mask);
 
-  act.sa_handler = intHandler;
-  act.sa_mask = sa_mask;
-  ret = sigaction(SIGINT, &act, NULL);
+  actSIGINT.sa_handler = intHandler;
+  actSIGINT.sa_mask = sa_mask;
+  ret = sigaction(SIGINT, &actSIGINT, NULL);
+  ERROR_HELPER(ret, "[MAIN]: Error in sigaction function");
+
+  actSIGPIPE.sa_handler = intHandler;
+  actSIGPIPE.sa_mask = sa_mask;
+  ret = sigaction(SIGPIPE, &actSIGPIPE, NULL);
+  ERROR_HELPER(ret, "[MAIN]: Error in sigaction function");
+
+  actSIGHUP.sa_handler = intHandler;
+  actSIGHUP.sa_mask = sa_mask;
+  ret = sigaction(SIGHUP, &actSIGHUP, NULL);
+  ERROR_HELPER(ret, "[MAIN]: Error in sigaction function");
+
+  actSIGHUP.sa_handler = intHandler;
+  actSIGHUP.sa_mask = sa_mask;
+  ret = sigaction(SIGTERM, &actSIGTERM, NULL);
   ERROR_HELPER(ret, "[MAIN]: Error in sigaction function");
 
   //init thread queue
@@ -844,8 +866,6 @@ int main(int argc, char const *argv[]) {
       ret = sem_init(sender_sync, 0, 0);
       ERROR_HELPER(ret, "[MAIN]:cannot init sender_sync sempahore");
 
-      //mailbox init
-      GAsyncQueue* mailbox_queue = mailbox_queue_init();
 
 
       //thread spawning
@@ -875,7 +895,6 @@ int main(int argc, char const *argv[]) {
       sender_args->chandler_sync      = chandler_sync;
       sender_args->sender_sync        = sender_sync;
       sender_args->client_ip          = client_ip;
-      sender_args->mailbox            = mailbox_queue;
       sender_args->mailbox_key        = client_user_name;
 
       fprintf(stderr, "[MAIN]: preparati argomenti per il sender thread\n");

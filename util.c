@@ -71,11 +71,6 @@ void free_user_list_element_key(gpointer data){
   return;
 }
 
-void free_mailbox_list_element_value(gpointer data){
-  if(data != NULL)UNREF((GAsyncQueue*)data);
-  return;
-}
-
 //free mailbox entry
 void free_mailbox(gpointer data){
   free((char*)data);
@@ -88,7 +83,7 @@ GHashTable* usr_list_init(){
 }
 
 GHashTable* mailbox_list_init(){
-  GHashTable* mailbox = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, (GDestroyNotify)free_mailbox_list_element_value);
+  GHashTable* mailbox = g_hash_table_new(g_str_hash, g_str_equal);
   return mailbox;
 }
 
