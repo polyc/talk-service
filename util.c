@@ -22,6 +22,7 @@ void send_msg(int socket, char *buf) {
         ret = send(socket, buf + bytes_sent, bytes_left, 0);
 
         if (ret == -1 && errno == EINTR) continue;
+        else if(ret == -1 && errno == EPIPE) return; //sigpipe
         ERROR_HELPER(ret, "Errore nella scrittura su socket");
 
         bytes_left -= ret;
@@ -38,14 +39,10 @@ int recv_msg(int socket, char *buf, size_t buf_len, int timer) {
         ret = recv(socket, buf + bytes_read, 1, 0);
 
         if (ret == 0) return -1; // client closed the socket
-        if (ret==-1 && (errno == EAGAIN || errno == EWOULDBLOCK)){
-          //fprintf(stdout, "controllo EAGAIN\n");
-          return -2;
-        }
-        if(ret == -1 && errno == ECONNRESET){
-          return -1;
-        }
-        if (ret == -1 && errno == EINTR) continue;
+        else if(ret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) return -2;
+        else if(ret == -1 && errno == EINTR) continue;
+        else if(ret == -1 && errno == ECONNRESET) return -1;
+        else if(ret == -1 && errno == ENOTCONN) return -1;
         ERROR_HELPER(ret, "Errore nella lettura da socket");
 
         // controlling last bye read
@@ -60,14 +57,17 @@ int recv_msg(int socket, char *buf, size_t buf_len, int timer) {
 
 //free hash table value
 void free_user_list_element_value(gpointer data){
+  fprintf(stdout, "FREE1\n");
   free(((usr_list_elem_t*)data)->client_ip);
+  fprintf(stdout, "FREE2\n");
   free((usr_list_elem_t*)data);
   return;
 }
 
 //free hash table key
 void free_user_list_element_key(gpointer data){
-  if(data != NULL)free((char*)data);
+  fprintf(stdout, "FREE3\n");
+  free((char*)data);
   return;
 }
 
