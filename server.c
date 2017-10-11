@@ -878,7 +878,7 @@ int main(int argc, char const *argv[]) {
   // loop to manage incoming connections spawning handler threads
     while (!GLOBAL_EXIT) {
       client_desc = accept(server_desc, (struct sockaddr*) client_addr, (socklen_t*) &sockaddr_len);
-      if (client_desc == -1 &&(errno == EINTR || errno == EAGAIN)) continue; // check for interruption by signals
+      if (client_desc == -1 &&(errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)) continue; // check for interruption by signals
       ERROR_HELPER(client_desc, "[MAIN]:cannot open socket for incoming connection");
 
       fprintf(stderr, "[MAIN]: connessione accettata\n");
