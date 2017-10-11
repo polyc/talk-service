@@ -71,7 +71,7 @@ int connection_accepted(char* response){
 int get_username(thread_args_t* args, usr_list_elem_t* new_element){
   char* send_buf = (char*)calloc(3, sizeof(char)); //buffer used to send response to client
   int inactivity_counter = 0;
-  while(!GLOBAL_EXIT){
+  while(1){
 
     int ret = recv_msg(args->socket, args->client_user_name, USERNAME_BUF_SIZE);
 
@@ -114,10 +114,8 @@ int get_username(thread_args_t* args, usr_list_elem_t* new_element){
       send_buf[0] = AVAILABLE;
       send_buf[1] = '\n';
       send_buf[2] = '\0';
-      send_msg(args->socket, send_buf);
-      free(send_buf);
+      //fprintf(stdout, "SEND BUF YES : %s\n", send_buf);
       fprintf(stdout, "[CONNECTION THREAD]: username got\n");
-      return 0;
     }
 
     else{
@@ -128,10 +126,18 @@ int get_username(thread_args_t* args, usr_list_elem_t* new_element){
       send_buf[0] = UNAVAILABLE;
       send_buf[1] = '\n';
       send_buf[2] = '\0';
-      send_msg(args->socket, send_buf);
-      free(send_buf);
+      fprintf(stdout, "SEND BUF NO : %s\n", send_buf);
       memset(args->client_user_name, 0, USERNAME_BUF_SIZE);
     }
+
+    //printf("ciaoooooooooooo\n");
+    send_msg(args->socket, send_buf);
+    free(send_buf);
+
+    if(send_buf[0] == AVAILABLE)
+      return 0;
+    else
+      return -2;
   }
   free(send_buf);
   return -1;
@@ -543,12 +549,8 @@ void* connection_handler(void* arg){
 
   usr_list_elem_t* element = (usr_list_elem_t*)malloc(sizeof(usr_list_elem_t));
 
-  //we enable SO_RCVTIMEO so that recv function will not be blocking
-  ret = setsockopt(args->socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout));
-  ERROR_HELPER(ret, "[CONENCTION THREAD] Cannot set SO_RCVTIMEO option");
-
   //get username while
-  while (1) {
+  while (!GLOBAL_EXIT) {
     ret = get_username(args, element);
 
     if (ret == 0) {//received username is available
