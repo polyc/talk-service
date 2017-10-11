@@ -28,12 +28,14 @@ GHashTable* user_list;
 char* USERNAME;
 char* USERNAME_CHAT;
 char* buf_commands;
-int   IS_CHATTING;      // 0 se non connesso 1 se connesso
-int   WAITING_RESPONSE; // 0 se non sta aspettando una risposta dal server 1 altrimenti
-int   GLOBAL_EXIT;      // 1 se bisogna interrompere il programma 0 altrimenti
+static volatile int   IS_CHATTING;      // 0 se non connesso 1 se connesso
+static volatile int   WAITING_RESPONSE; // 0 se non sta aspettando una risposta dal server 1 altrimenti
+static sig_atomic_t   GLOBAL_EXIT;      // 1 se bisogna interrompere il programma 0 altrimenti
 
 
 void sigHandler(int sig){
+
+  fprintf(stdout, "\n<<<<<<CATCHED SIGNAL>>>>>>\n");
 
   GLOBAL_EXIT = 1;
   return;
@@ -44,13 +46,18 @@ void _initSignals(){
 
   int ret;
 
-  //SIGINT
-  sigset_t mask1;
-  ret = sigfillset(&mask1);
+  sigset_t mask;
+  struct sigaction sigint_act, sigpipe_act, sigterm_act;
+
+  memset(&sigint_act,  0, sizeof(struct sigaction));
+  memset(&sigpipe_act, 0, sizeof(struct sigaction));
+  memset(&sigterm_act, 0, sizeof(struct sigaction));
+
+  ret = sigfillset(&mask);
   ERROR_HELPER(ret, "[MAIN] Error in sigfillset function");
 
-  struct sigaction sigint_act;
-  sigint_act.sa_mask    = mask1;
+  //SIGINT
+  sigint_act.sa_mask    = mask;
   sigint_act.sa_flags   = 0;
   sigint_act.sa_handler = sigHandler;
 
@@ -58,27 +65,17 @@ void _initSignals(){
   ERROR_HELPER(ret, "[MAIN] Error in sigaction function");
 
   //SIGPIPE
-  sigset_t mask2;
-  ret = sigfillset(&mask2);
-  ERROR_HELPER(ret, "[MAIN] Error in sigfillset function");
-
-  struct sigaction sigpipe_act;
-  sigpipe_act.sa_mask = mask2;
-  sigpipe_act.sa_flags = 0;
+  sigpipe_act.sa_mask    = mask;
+  sigpipe_act.sa_flags   = 0;
   sigpipe_act.sa_handler = sigHandler;
 
   ret = sigaction(SIGPIPE, &sigpipe_act, NULL);
   ERROR_HELPER(ret, "[MAIN] Error in sigaction function");
 
   //SIGTERM
-  sigset_t mask3;
-  ret = sigfillset(&mask3);
-  ERROR_HELPER(ret, "[MAIN] Error in sigfillset function");
-
-  struct sigaction sigterm_act;
-  sigpipe_act.sa_mask = mask3;
-  sigpipe_act.sa_flags = 0;
-  sigpipe_act.sa_handler = sigHandler;
+  sigterm_act.sa_mask    = mask;
+  sigterm_act.sa_flags   = 0;
+  sigterm_act.sa_handler = sigHandler;
 
   ret = sigaction(SIGTERM, &sigterm_act, NULL);
   ERROR_HELPER(ret, "[MAIN] Error in sigaction function");
@@ -273,7 +270,11 @@ int get_username(char* username, int socket){
   memset(buf, 0, USERNAME_BUF_SIZE+1);
 
   ret = recv_msg(socket, buf, 2);
-  ERROR_HELPER(ret, "[GET_USERNAME] Error receiving username check from server"); //forse bisogna aggiungere un timeout per questa receive
+  if(ret == -1){
+    GLOBAL_EXIT = 1;
+    free(buf);
+    return 1;
+  }
 
   fprintf(stdout, "[GET_USERNAME] Username available? [%c]\n", buf[0]);
 
@@ -544,7 +545,9 @@ void* read_updates(void* args){
 
 void* recv_updates(void* args){
 
-  int ret;
+  int ret, NO_CONNECTION;
+
+  NO_CONNECTION = 0;
 
   struct timeval timeout;
   timeout.tv_sec  = 2;
@@ -598,13 +601,26 @@ void* recv_updates(void* args){
   ret = sem_post(&sync_receiver);
   ERROR_HELPER(ret, "[RECV_UPDATES] Error in sem_post on &sync_receiver semaphore (user list receiver thread routine)");
 
-  //accepting connection from server on user list receiver thread socket
-  int rec_socket = accept(usrl_recv_socket, (struct sockaddr*) usrl_sender_address, &usrl_sender_address_len);
-  ERROR_HELPER(ret, "[RECV_UPDATES] Cannot accept connection on user list receiver thread socket");
-
   //we enable SO_RCVTIMEO so that recv function will not be blocking
-  ret = setsockopt(rec_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout));
-  ERROR_HELPER(ret, "[RECV_UPDATES] Cannot set SO_RCVTIMEO option");
+  ret = setsockopt(usrl_recv_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout));
+  ERROR_HELPER(ret, "[RECV_UPDATES] Cannot set SO_RCVTIMEO option on usrl_recv_socket");
+
+  int rec_socket;
+
+  while(!GLOBAL_EXIT){
+
+    //accepting connection from server on user list receiver thread socket
+    rec_socket = accept(usrl_recv_socket, (struct sockaddr*) usrl_sender_address, &usrl_sender_address_len);
+    if(rec_socket==-1 && (errno == EAGAIN || errno == EWOULDBLOCK )) continue;
+    ERROR_HELPER(ret, "[RECV_UPDATES] Cannot accept connection on user list receiver thread socket");
+
+    //we enable SO_RCVTIMEO so that recv function will not be blocking
+    ret = setsockopt(rec_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout));
+    ERROR_HELPER(ret, "[RECV_UPDATES] Cannot set SO_RCVTIMEO option rec_socket");
+    NO_CONNECTION = 1;
+    break;
+
+  }
 
   fprintf(stderr, "[RECV_UPDATES] accepted connection from server\n");
 
@@ -657,9 +673,10 @@ void* recv_updates(void* args){
 
   fprintf(stderr, "[RECV_UPDATES] closing rec_socket and arg->socket...\n");
 
-  ret = close(rec_socket);
-  ERROR_HELPER(ret, "[RECV_UPDATES] Cannot close socket");
-
+  if(NO_CONNECTION){
+    ret = close(rec_socket);
+    ERROR_HELPER(ret, "[RECV_UPDATES] Cannot close socket");
+  }
   ret = close(usrl_recv_socket);
   ERROR_HELPER(ret, "[RECV_UPDATES] Cannot close usrl_recv_socket");
 
@@ -714,7 +731,7 @@ int main(int argc, char* argv[]){
   struct sockaddr_in serv_addr = {0};
   serv_addr.sin_family         = AF_INET;
   serv_addr.sin_port           = htons(SERVER_PORT);
-  serv_addr.sin_addr.s_addr    = inet_addr(SERVER_IP);
+  inet_pton(AF_INET, SERVER_IP, &(serv_addr.sin_addr.s_addr));
 
   fprintf(stdout, "[MAIN] created data structure for connection with server\n");
 
