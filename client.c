@@ -232,16 +232,28 @@ int get_username(char* username, int socket){
 
   fprintf(stdout, "[GET_USERNAME] Enter username(max 16 char): ");
 
-  username = fgets(username, USERNAME_BUF_SIZE, stdin);
+  username = fgets(username, USERNAME_LENGTH + 1, stdin);
 
   if(GLOBAL_EXIT){
     return 1;
   }
 
+  char* newLine = strchr(username, '\n');
+  if(newLine == NULL){
+    fprintf(stdout, "CIAOOOOOOO\n");
+    username[USERNAME_LENGTH] = '\n';
+    username[USERNAME_LENGTH + 1] = '\0';
+  }
+  else{
+    int size = strlen(username);
+    username[size-1] = '\n';
+    username[size] = '\0';
+  }
+
   //checking if username has at least 1 character
   if(strlen(username)-1 == 0){ //because there is a \n got from fgets
     fprintf(stdout, "[GET_USERNAME] No username input\n");
-    fflush(stdout);
+    fflush(stdin);
     return 0;
   }
 
@@ -249,17 +261,15 @@ int get_username(char* username, int socket){
   for(i=0; i < strlen(username); i++){
     if(username[i]=='-'){
       fprintf(stdout, "[GET_USERNAME] Char '-' found in username ... input correct username\n");
-      fflush(stdout);
+      fflush(stdin);
       return 0; //contains '-' character, username not ok return 0
     }
   }
 
   //sending buffer init data for user list
   //creating buffer for username and availability flag
-  char* buf = (char*)calloc(USERNAME_BUF_SIZE+1, sizeof(char));
+  char* buf = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
   strncpy(buf, username, strlen(username));
-  buf[strlen(buf)]   = '\n';
-  buf[strlen(buf)+1] = '\0'; //invalide write of size 1 ... dont know why
 
   //sending username to server
   send_msg(socket, buf);
@@ -267,9 +277,9 @@ int get_username(char* username, int socket){
   fprintf(stdout, "[GET_USERNAME] sent username [%s] to server\n", buf);
 
   //checking if username already in use
-  memset(buf, 0, USERNAME_BUF_SIZE+1);
+  memset(buf, 0, USERNAME_BUF_SIZE);
 
-  ret = recv_msg(socket, buf, 2);
+  ret = recv_msg(socket, buf, 3);
   if(ret == -1){
     GLOBAL_EXIT = 1;
     free(buf);
@@ -280,12 +290,12 @@ int get_username(char* username, int socket){
 
   if(buf[0] == UNAVAILABLE){
     free(buf);
-    fflush(stdout);
+    //fflush(stdin);
     return 0; //username not ok
   }
 
   free(buf);
-  fflush(stdout);
+  //fflush(stdin);
   username[strlen(username)-1] = '\0';
   return 1; //usrname ok
 }
@@ -709,7 +719,7 @@ int main(int argc, char* argv[]){
   IS_CHATTING      = 0; // non sono connesso a nessuno per adesso
   GLOBAL_EXIT      = 0;
   WAITING_RESPONSE = 0; // non aspetto nessuna risposta da server
-  USERNAME         = (char*)calloc(USERNAME_BUF_SIZE+1, sizeof(char));
+  USERNAME         = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
   USERNAME_CHAT    = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
 
   //initializing semaphores
