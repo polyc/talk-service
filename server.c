@@ -28,6 +28,7 @@ GHashTable* mailbox_list;
 static volatile int GLOBAL_EXIT = 0;
 struct timeval timeout;
 
+
 void intHandler(int sig){
   if(sig == SIGPIPE){
     fprintf(stdout, "CATCHED SIGPIPE\n");
@@ -39,7 +40,8 @@ void intHandler(int sig){
   }
 }
 
-//parse target username
+
+//parse target username from a connection request/response string
 char* parse_username(char* src, char* dest, char message_type){
   int i;
   int len = strlen(src);
@@ -66,12 +68,14 @@ char* parse_username(char* src, char* dest, char message_type){
   //return dest;
 }
 
+
 int connection_accepted(char* response){
   if(response[1] == 'y')
     return 1;
   else
     return 0;
 }
+
 
 //receive username from client and check if it's already used by another connected client
 int get_username(thread_args_t* args, usr_list_elem_t* new_element){
@@ -160,6 +164,7 @@ int get_username(thread_args_t* args, usr_list_elem_t* new_element){
   return -1;
 }
 
+
 void update_availability(usr_list_elem_t* elem_to_update, char buf_command){
   int ret = sem_wait(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD][UPDATING AVAILABILITY]: cannot wait on user_list_mutex");
@@ -169,6 +174,7 @@ void update_availability(usr_list_elem_t* elem_to_update, char buf_command){
   ret = sem_post(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD][UPDATING AVAILABILITY]: cannot post on user_list_mutex");
 }
+
 
 //remove entries from hash tables when a client disconnects from server
 void remove_entry(char* elem_to_remove, char* mailbox_to_remove){
@@ -191,7 +197,8 @@ void remove_entry(char* elem_to_remove, char* mailbox_to_remove){
   fprintf(stdout, "[CONNECTION THREAD]: successfully removed entry on disconnect operation\n");
 }
 
-//pushing message into sender thread personal GAsyncQueue
+
+//push a message into sender thread personal GAsyncQueue
 void push_entry(gpointer key, gpointer value, gpointer user_data){
   push_entry_args_t* args = (push_entry_args_t*)user_data;
 
@@ -204,6 +211,7 @@ void push_entry(gpointer key, gpointer value, gpointer user_data){
     UNREF(ref_value);
   }
 }
+
 
 //get target element from userlist
 usr_list_elem_t* getTargetElement(char* target_buf){
@@ -218,6 +226,7 @@ usr_list_elem_t* getTargetElement(char* target_buf){
 
   return target;
 }
+
 
 //function called by FOR_EACH. It sends userlist on connection to receiver thread in client
 void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_data){
@@ -244,6 +253,7 @@ void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_
   return;
 }
 
+
 //push a message to all clients connected to server
 void push_all(push_entry_args_t* args){
   int err = sem_wait(&mailbox_list_mutex);
@@ -260,7 +270,8 @@ void push_all(push_entry_args_t* args){
   ERROR_HELPER(err, "[CONNECTION THREAD]: cannot post on mailbox_list_mutex");
 }
 
-//notify all clients
+
+//notify all clients, using push_all
 void notify(char* message_buf, char* element_username, char* mod_command, usr_list_elem_t* element_to_update){
   int ret = sem_wait(&user_list_mutex);
   ERROR_HELPER(ret, "Cannot wait on user_list_mutex");
@@ -287,6 +298,8 @@ void notify(char* message_buf, char* element_username, char* mod_command, usr_li
   ERROR_HELPER(ret, "Cannot post on user_list_mutex");
 }
 
+
+//parse a command received from client and execute it
 int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* element_to_update, char* target_buf){
 
   int ret = 0;
@@ -520,6 +533,7 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
   return ret;
 }
 
+
 //transform a usr_list_elem_t in a string according to mod_command
 void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_username, char mod_command){
   fprintf(stdout, "[SERIALIZE]: sono dentro la funzione di serializzazione\n");
@@ -564,7 +578,8 @@ void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_user
   }
 }
 
-//client-process/server-threads communication routine
+
+//client-processes/server-threads communication routine
 void* connection_handler(void* arg){
   thread_args_t* args = (thread_args_t*)arg;
 
@@ -738,6 +753,7 @@ void* connection_handler(void* arg){
   pthread_exit(EXIT_SUCCESS);
 }
 
+
 //push notification communication routine
 void* sender_routine(void* arg){
   int ret;
@@ -848,6 +864,7 @@ void* sender_routine(void* arg){
 
   pthread_exit(EXIT_SUCCESS);
 }
+
 
 int main(int argc, char const *argv[]) {
   int ret, server_desc, client_desc;

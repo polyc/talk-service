@@ -4,7 +4,7 @@
 #define MAX_GET_USERNAME_INACTIVITY 120
 #define MAX_INACTIVITY 600
 
-//data structure passed to threads on creation
+//data structure passed to connection handler threads on creation
 typedef struct thread_args_s{
   int socket;
   char* client_ip;
@@ -12,6 +12,7 @@ typedef struct thread_args_s{
   char* mailbox_key;//key for mailbox hash table
 } thread_args_t;
 
+//data structure passed to sender threads on creation
 typedef struct sender_thread_args_s{
   sem_t* sender_stop;//sender termination notify
   sem_t* sender_sync;//sync between chandlers and senders
@@ -20,14 +21,16 @@ typedef struct sender_thread_args_s{
   char* mailbox_key;
 }sender_thread_args_t;
 
+//struct for push_entry function
 typedef struct push_entry_args_s{
   char* message;
   char* sender_username;
 }push_entry_args_t;
 
+//struct for send_list
 typedef struct send_list_args_s{
   int* socket;
-  int* threads_term;
+  int* threads_term; ////notify chandler a sigpipe (it's the same var in sender_thread_args_s)
 }send_list_args_t;
 
 //void create_user_list_element(usr_list_elem_t* element, char* ip, thread_args_t* args, char* buf);
