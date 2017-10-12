@@ -28,6 +28,7 @@ GHashTable* usr_list_init();
 void _initSignals();
 void _initSemaphores();
 void intHandler();
+void my_flush();
 void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command);
 void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName, char* mod_command);
 void list_command();
