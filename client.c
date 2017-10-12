@@ -228,7 +228,7 @@ int get_username(char* username, int socket){
   //changed USERNAME_BUF_SIZE + 1 because fgets puts in buffer the \n character
   //if there are problems take away +1
 
-  int i, ret;
+  int i = 0, ret;
 
   fprintf(stdout, "[GET_USERNAME] Enter username(max 16 char): ");
 
@@ -238,11 +238,16 @@ int get_username(char* username, int socket){
     return 1;
   }
 
+
   char* newLine = strchr(username, '\n');
   if(newLine == NULL){
     fprintf(stdout, "CIAOOOOOOO\n");
     username[USERNAME_LENGTH] = '\n';
     username[USERNAME_LENGTH + 1] = '\0';
+
+    int c;
+    while ( ( c = getchar() ) != EOF && c != '\n' );
+
   }
   else{
     int size = strlen(username);
@@ -848,6 +853,10 @@ int main(int argc, char* argv[]){
       fprintf(stdout, "\n>>command not found\n");
       display_commands();
       memset(buf_commands,  0, MSG_LEN);
+      fprintf(stdout, "\n>>PRESS ENTER TO CONTINUE\n");
+      //scarico stdin
+      int c;
+      while ( ( c = getchar() ) != EOF && c != '\n' );
     }
 
   }
