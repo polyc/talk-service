@@ -107,6 +107,12 @@ void _initSemaphores(){
   return;
 }
 
+void my_flush(){
+  int c;
+  if((c = feof(stdin)) == 0) return;
+  while ((c = getchar()) != '\n' );
+}
+
 static void print_userList(gpointer key, gpointer elem, gpointer data){
 
   char* username = (char*)key;
@@ -216,7 +222,7 @@ void responde(int socket){
   }
 
   else{
-    fprintf(stdout, "[MAIN] Wrong input for connetion response\n");
+    fprintf(stdout, "[MAIN] Wrong input for connetion response. Insert y/n....\n");
     memset(buf_commands+1, 0, MSG_LEN);
     return;
   }
@@ -245,9 +251,7 @@ int get_username(char* username, int socket){
     username[USERNAME_LENGTH] = '\n';
     username[USERNAME_LENGTH + 1] = '\0';
 
-    int c;
-    while ( ( c = getchar() ) != EOF && c != '\n' );
-
+    my_flush();
   }
   else{
     int size = strlen(username);
@@ -456,7 +460,7 @@ void* read_updates(void* args){
       break;
     }
 
-    fprintf(stdout, "[READ_UPDATES] Elem buff[0]: %c\n", elem_buf[0]);
+    //fprintf(stdout, "[READ_UPDATES] Elem buff[0]: %c\n", elem_buf[0]);
 
     //fprintf(stdout, "[READ_UPDATES] Connection request");
 
@@ -469,7 +473,7 @@ void* read_updates(void* args){
         continue;
       }
 
-      fprintf(stdout, "[%s]>> %s\n", USERNAME_CHAT, elem_buf+1);
+      fprintf(stdout, "\n[%s]>> %s\n", USERNAME_CHAT, elem_buf+1);
       free(elem_buf);
       continue;
     }
@@ -815,6 +819,7 @@ int main(int argc, char* argv[]){
 
     else if(buf_commands[0] == CONNECTION_RESPONSE){
       responde(socket_desc);
+      my_flush();
       continue;
     }
 
@@ -853,10 +858,8 @@ int main(int argc, char* argv[]){
       fprintf(stdout, "\n>>command not found\n");
       display_commands();
       memset(buf_commands,  0, MSG_LEN);
-      fprintf(stdout, "\n>>PRESS ENTER TO CONTINUE\n");
       //scarico stdin
-      int c;
-      while ( ( c = getchar() ) != EOF && c != '\n' );
+      my_flush();
     }
 
   }
