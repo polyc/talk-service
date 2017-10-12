@@ -12,7 +12,7 @@
 
 
 
-void send_msg(int socket, char *buf) {
+int send_msg(int socket, char *buf) {
     int ret;
 
     int bytes_left = strlen(buf); //bruscolini al posto di pere ahahaha
@@ -22,7 +22,8 @@ void send_msg(int socket, char *buf) {
         ret = send(socket, buf + bytes_sent, bytes_left, 0);
 
         if (ret == -1 && errno == EINTR) continue;
-        else if(ret == -1 && errno == EPIPE) return; //sigpipe
+        else if(ret == -1 && errno == EPIPE) return -1; //sigpipe
+        else if(ret == -1 && (errno == ENETDOWN || errno == INETUNREACH)) return -2;
         ERROR_HELPER(ret, "Errore nella scrittura su socket");
 
         bytes_left -= ret;
