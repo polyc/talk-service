@@ -23,7 +23,7 @@ int send_msg(int socket, char *buf) {
 
         if (ret == -1 && errno == EINTR) continue;
         else if(ret == -1 && errno == EPIPE) return -1; //sigpipe
-        else if(ret == -1 && (errno == ENETDOWN || errno == INETUNREACH)) return -2;
+        else if(ret == -1 && (errno == ENETDOWN || errno == ENETUNREACH)) return -2;
         ERROR_HELPER(ret, "Errore nella scrittura su socket");
 
         bytes_left -= ret;
