@@ -9,14 +9,13 @@ typedef struct thread_args_s{
   int socket;
   char* client_ip;
   char* client_user_name; //key for userlist hash table
-  //sem_t* chandler_sync;
-  //sem_t* sender_sync;
   char* mailbox_key;//key for mailbox hash table
 } thread_args_t;
 
 typedef struct sender_thread_args_s{
-  sem_t* sender_stop;//termination notify
+  sem_t* sender_stop;//sender termination notify
   sem_t* sender_sync;//sync between chandlers and senders
+  int* threads_term;//notify chandler a sigpipe
   char* client_ip;
   char* mailbox_key;
 }sender_thread_args_t;
@@ -25,6 +24,11 @@ typedef struct push_entry_args_s{
   char* message;
   char* sender_username;
 }push_entry_args_t;
+
+typedef struct send_list_args_s{
+  int* socket;
+  int* threads_term;
+}send_list_args_t;
 
 //void create_user_list_element(usr_list_elem_t* element, char* ip, thread_args_t* args, char* buf);
 

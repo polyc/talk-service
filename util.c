@@ -29,6 +29,7 @@ int send_msg(int socket, char *buf) {
         bytes_left -= ret;
         bytes_sent += ret;
     }
+  return 0;
 }
 
 int recv_msg(int socket, char *buf, size_t buf_len, int timer) {

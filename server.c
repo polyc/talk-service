@@ -28,9 +28,15 @@ GHashTable* mailbox_list;
 static volatile int GLOBAL_EXIT = 0;
 struct timeval timeout;
 
-void intHandler(){
-  fprintf(stdout, "\n\n<<<<< preparing to exit program>>>>>\n\n");
-  GLOBAL_EXIT = 1;
+void intHandler(int sig){
+  if(sig == SIGPIPE){
+    fprintf(stdout, "CATCHED SIGPIPE\n");
+    return;
+  }
+  else{
+    fprintf(stdout, "\n\n<<<<< preparing to exit program>>>>>\n\n");
+    GLOBAL_EXIT = 1;
+  }
 }
 
 //parse target username
@@ -71,7 +77,7 @@ int connection_accepted(char* response){
 int get_username(thread_args_t* args, usr_list_elem_t* new_element){
   char* send_buf = (char*)calloc(3, sizeof(char)); //buffer used to send response to client
   int inactivity_counter = 0;
-  while(1){
+  while(!GLOBAL_EXIT){
 
     int ret = recv_msg(args->socket, args->client_user_name, USERNAME_BUF_SIZE);
 
@@ -130,14 +136,25 @@ int get_username(thread_args_t* args, usr_list_elem_t* new_element){
       memset(args->client_user_name, 0, USERNAME_BUF_SIZE);
     }
 
-    //printf("ciaoooooooooooo\n");
-    send_msg(args->socket, send_buf);
-    free(send_buf);
+    ret = send_msg(args->socket, send_buf);
+    //sigpipe
+    if(ret == -1){
+      return -1; //TERM THREAD
+    }
+    //network down
+    if(ret == -2){
+      GLOBAL_EXIT = 1;
+    }
+    ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot send message on socket");
 
-    if(send_buf[0] == AVAILABLE)
-      return 0;
-    else
-      return -2;
+    if(send_buf[0] == AVAILABLE){
+      free(send_buf);
+      return 0; //OK
+    }
+    else{
+      free(send_buf);
+      return -2; //bad username
+    }
   }
   free(send_buf);
   return -1;
@@ -209,7 +226,20 @@ void send_list_on_client_connection(gpointer key, gpointer value, gpointer user_
 
   serialize_user_element(buf, (usr_list_elem_t*)value, (char*)key, NEW);
 
-  send_msg(*((int*)user_data), buf); //(socket, buf);
+  int ret = send_msg( *(((send_list_args_t*)user_data)->socket), buf);
+  //sigpipe
+  if(ret == -1){
+    *(((send_list_args_t*)user_data)->threads_term) = 1; //TERM PAIR OF THREADS
+    free(buf);
+    return;
+  }
+  //network down
+  if(ret == -2){
+    GLOBAL_EXIT = 1;
+    free(buf);
+    return;
+  }
+  ERROR_HELPER(ret, "[SENDER THREAD]: cannot send message on socket");
   free(buf);
   return;
 }
@@ -538,7 +568,9 @@ void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_user
 void* connection_handler(void* arg){
   thread_args_t* args = (thread_args_t*)arg;
 
-  int ret, inactivity_counter = 0;
+  int ret;
+  int inactivity_counter = 0;
+  static volatile int threads_term = 0; //is 1 when a send_msg in sender thread return -1 because of EPIPE
 
   char* mod_command = (char*)malloc(sizeof(char));
 
@@ -561,7 +593,7 @@ void* connection_handler(void* arg){
       continue;
     }
 
-    if(ret == -1){ //client closed endpoint or server killed
+    if(ret == -1){ //client closed endpoint or server killed or sigpipe on send_msg
 
       fprintf(stdout, "[CONNECTION THREAD]: closed endpoint or server killed\n");
 
@@ -597,8 +629,9 @@ void* connection_handler(void* arg){
   //arguments allocation
   sender_thread_args_t* sender_args = (sender_thread_args_t*)malloc(sizeof(sender_thread_args_t));
 
-  sender_args->sender_stop      = sender_stop;
+  sender_args->sender_stop        = sender_stop;
   sender_args->sender_sync        = sender_sync;
+  sender_args->threads_term       = &threads_term;
   sender_args->client_ip          = args->client_ip;
   sender_args->mailbox_key        = args->client_user_name;
 
@@ -623,15 +656,22 @@ void* connection_handler(void* arg){
 
   //RECEIVING COMMANDS
   while(!GLOBAL_EXIT){
+
+    //sigpipe in sender threads ---->>> terminates this pair of threads
+    if(threads_term){
+      break;
+    }
+
     int ret = recv_msg(args->socket, message_buf, MSG_LEN);
 
+    //*********************RECEIVE RETURN HANDLING*******************************
     //EAGAIN case
     if(ret == -2){
       if(inactivity_counter == MAX_INACTIVITY){
         ret = sem_wait(&user_list_mutex);
         ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot wait on user_list_mutex");
 
-        if(element->a_flag != UNAVAILABLE){ //se non è in chat
+        if(element->a_flag != UNAVAILABLE){ //se non è in chat uccide il client
           ret = sem_post(&user_list_mutex);
           ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot post on user_list_mutex");
 
@@ -648,26 +688,29 @@ void* connection_handler(void* arg){
       }
     }
 
-    if(ret == -1){ //socket is cloesed by client
+    //socket is cloesed by client
+    if(ret == -1){
       fprintf(stdout, "[CONNECTION THREAD]: closed endpoint\n");
       message_buf[0] = DISCONNECT;
 
       ret = execute_command(args, message_buf, element, target_useraname_buf);
       break;
     }
+    //********************* END OF RECEIVE RETURN HANDLING**********************
 
     //PERFORM REQUESTED ACTIVITY
     inactivity_counter = 0; //reset counter because is going to be performed an activity
     ret = execute_command(args, message_buf, element, target_useraname_buf);
+
     //HANDLE CLIENT EXIT
     if (ret < 0){
       break; //exit condition
     }
   }
 
-  //EXIT OPERATIONS
+  //*********************EXIT OPERATIONS***************************************
 
-  //notify sender thread must stop
+  //notify sender thread, it must stop
   ret = sem_wait(sender_stop);
   ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot wait on sender_stop");
 
@@ -735,22 +778,30 @@ void* sender_routine(void* arg){
   ret = sem_post(args->sender_sync);
   ERROR_HELPER(ret, "[SENDER THREAD]:cannot post sender_sync sempahore");
 
+
+  //send_list_on_client_connection args
+  send_list_args_t* s_args = (send_list_args_t*)malloc(sizeof(send_list_args_t));
+  s_args->socket = &socket_desc;
+  s_args->threads_term = args->threads_term;
+
   //sending list to client receiver thread
   ret = sem_wait(&user_list_mutex);
   ERROR_HELPER(ret, "[SENDER THREAD]: cannot wait on user_list_mutex");
 
-  FOR_EACH(user_list, (GHFunc)send_list_on_client_connection, (gpointer)&socket_desc);
+  FOR_EACH(user_list, (GHFunc)send_list_on_client_connection, (gpointer)s_args);
 
   ret = sem_post(&user_list_mutex);
   ERROR_HELPER(ret, "[SENDER THREAD]: cannot wait on user_list_mutex");
   fprintf(stdout, "[SENDER THREAD]: sended list on first connection\n");
+
+  free(s_args);
 
   char* message;
   int sem_value;
   //GET UPDATES FROM PERSONAL MAILBOX
   while(1){
     ret = sem_getvalue(args->sender_stop, &sem_value);
-    if(!(ret == -1 && errno == EINVAL)){//semaforo distrutto da cHandler
+    if(!(ret == -1 && errno == EINVAL)){//semaforo distrutto
       ERROR_HELPER(ret, "[SENDER THREAD]:cannot get value of chandler_sync sempahore");
     }
     //check termination condition
@@ -769,11 +820,21 @@ void* sender_routine(void* arg){
     if(message == NULL)continue;
 
     //sending message to client's receiver thread
-    send_msg(socket_desc, message);
+    ret = send_msg(socket_desc, message);
+    //sigpipe
+    if(ret == -1){
+      *(args->threads_term) = 1;
+    }
+    else if(ret == -2){//network down
+      GLOBAL_EXIT = 1;
+    }
+    ERROR_HELPER(ret, "[SENDER THREAD]: cannot send message on socket");
+
     fprintf(stdout, "MESSAGGIO: %s\n", message);
     fprintf(stdout, "[SENDER THREAD]: message sended to client's reciever thread\n");
     free(message);
   }
+
   //exit operations
   UNREF(my_mailbox);
   UNREF(mailbox_queue);
