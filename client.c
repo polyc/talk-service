@@ -27,6 +27,7 @@ GHashTable* user_list;
 
 char* USERNAME;
 char* USERNAME_CHAT;
+char* USERNAME_REQUEST;
 char* buf_commands;
 static volatile int   IS_CHATTING;      // 0 se non connesso 1 se connesso
 static volatile int   WAITING_RESPONSE; // 0 se non sta aspettando una risposta dal server 1 altrimenti
@@ -155,11 +156,17 @@ void list_command(){
 
 void send_message(int socket){
 
+  int ret;
+
   buf_commands[0] = MESSAGE; //per il parsing per i messaggi
 
   buf_commands[strlen(buf_commands)]   = '\n';
   buf_commands[strlen(buf_commands)+1] = '\0';
-  send_msg(socket, buf_commands);
+  ret = send_msg(socket, buf_commands);
+  if(ret == -2){
+    GLOBAL_EXIT = 1;
+    return;
+  }
 
   //fprintf(stdout, "[MAIN] buf_commands = %s\n", buf_commands);
 
@@ -185,8 +192,16 @@ void connect_to(int socket, char* target_client){
 
   fgets(target_client+1, MSG_LEN-1, stdin);  //prende lo username
 
+  strncpy(USERNAME_REQUEST, target_client+1, strlen(target_client)-2);
+  fprintf(stdout, "[MAIN] USERNAME_REQUEST: %s\n", USERNAME_REQUEST);
+
   //sending chat username to server
-  send_msg(socket, target_client);
+  ret = send_msg(socket, target_client);
+  fprintf(stdout, "RET VALUE IS: %d and ERRNO: %s\n", ret, strerror(errno));
+  if(ret == -2){
+    GLOBAL_EXIT = 1;
+    return;
+  }
 
   memset(buf_commands,  0, MSG_LEN);
   memset(target_client, 0, MSG_LEN);
@@ -195,12 +210,16 @@ void connect_to(int socket, char* target_client){
   ret = sem_wait(&wait_response);
   ERROR_HELPER(ret, "[MAIN] Error in sem_wait wait_response");
 
+  memset(USERNAME_REQUEST, 0, USERNAME_BUF_SIZE);
+
   WAITING_RESPONSE = 0;
 
   return;
 }
 
 void responde(int socket){
+
+  int ret;
 
   if(((buf_commands[1]=='y' || buf_commands[1]=='n') && strlen(buf_commands)==3)){
 
@@ -215,7 +234,11 @@ void responde(int socket){
     buf_commands[strlen(buf_commands)] = '\n';
     buf_commands[strlen(buf_commands)+1] = '\0';
 
-    send_msg(socket, buf_commands);
+    ret = send_msg(socket, buf_commands);
+    if(ret == -2){
+      GLOBAL_EXIT = 1;
+      return;
+    }
 
     memset(buf_commands, 0, MSG_LEN);
     return;
@@ -247,7 +270,6 @@ int get_username(char* username, int socket){
 
   char* newLine = strchr(username, '\n');
   if(newLine == NULL){
-    fprintf(stdout, "CIAOOOOOOO\n");
     username[USERNAME_LENGTH] = '\n';
     username[USERNAME_LENGTH + 1] = '\0';
 
@@ -257,13 +279,6 @@ int get_username(char* username, int socket){
     int size = strlen(username);
     username[size-1] = '\n';
     username[size] = '\0';
-  }
-
-  //checking if username has at least 1 character
-  if(strlen(username)-1 == 0){ //because there is a \n got from fgets
-    fprintf(stdout, "[GET_USERNAME] No username input\n");
-    fflush(stdin);
-    return 0;
   }
 
   //checking if username contains '-' character
@@ -281,14 +296,22 @@ int get_username(char* username, int socket){
   strncpy(buf, username, strlen(username));
 
   //sending username to server
-  send_msg(socket, buf);
+  ret = send_msg(socket, buf);
+  //fprintf(stdout, "SEND_USERNAME RET: %d ERRNO: %s\n", ret, strerror(errno));
+  if(ret == -2){
+    GLOBAL_EXIT = 1;
+    return 1;
+  }
 
   fprintf(stdout, "[GET_USERNAME] sent username [%s] to server\n", buf);
 
   //checking if username already in use
   memset(buf, 0, USERNAME_BUF_SIZE);
 
-  ret = recv_msg(socket, buf, 3);
+  ret = recv_msg(socket, buf, 3); //senza connessione internet si blocca qui
+
+  //fprintf(stdout, "RECV RET: %d ERRNO: %s\n", ret, strerror(errno));
+
   if(ret == -1){
     GLOBAL_EXIT = 1;
     free(buf);
@@ -348,6 +371,12 @@ void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command){
 
     if(strcmp(buf_userName, USERNAME_CHAT)==0){
       IS_CHATTING = 0;
+    }
+
+    else if(strcmp(buf_userName, USERNAME_REQUEST)==0){
+      //ublocking &wait_response
+      ret = sem_post(&wait_response);
+      ERROR_HELPER(ret, "[READ_UPDATES] Error in sem_post on &wait_response semaphore");
     }
 
     ret = REMOVE(user_list, (gpointer)buf_userName);
@@ -566,7 +595,7 @@ void* recv_updates(void* args){
 
   int ret, NO_CONNECTION;
 
-  NO_CONNECTION = 0;
+  NO_CONNECTION = 1;
 
   struct timeval timeout;
   timeout.tv_sec  = 2;
@@ -625,23 +654,25 @@ void* recv_updates(void* args){
   ERROR_HELPER(ret, "[RECV_UPDATES] Cannot set SO_RCVTIMEO option on usrl_recv_socket");
 
   int rec_socket;
+  int tim = 0;
 
   while(!GLOBAL_EXIT){
 
     //accepting connection from server on user list receiver thread socket
     rec_socket = accept(usrl_recv_socket, (struct sockaddr*) usrl_sender_address, &usrl_sender_address_len);
-    if(rec_socket==-1 && (errno == EAGAIN || errno == EWOULDBLOCK )) continue;
+    if(rec_socket==-1 && (errno == EAGAIN || errno == EWOULDBLOCK )){
+      tim++;
+      if(tim >= MAX_WAIT_SERVER){
+        GLOBAL_EXIT=1;
+        fprintf(stdout, "\n<<<<MAX_WAIT_SERVER timer expired>>>>\n");
+      }
+      continue;
+    }
     ERROR_HELPER(ret, "[RECV_UPDATES] Cannot accept connection on user list receiver thread socket");
-
-    //we enable SO_RCVTIMEO so that recv function will not be blocking
-    ret = setsockopt(rec_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout));
-    ERROR_HELPER(ret, "[RECV_UPDATES] Cannot set SO_RCVTIMEO option rec_socket");
-    NO_CONNECTION = 1;
+    NO_CONNECTION = 0;
+    fprintf(stderr, "[RECV_UPDATES] accepted connection from server\n");
     break;
-
   }
-
-  fprintf(stderr, "[RECV_UPDATES] accepted connection from server\n");
 
   //buffer for recv_msg function
   char* buf = (char*)calloc(MSG_LEN, sizeof(char));
@@ -692,7 +723,7 @@ void* recv_updates(void* args){
 
   fprintf(stderr, "[RECV_UPDATES] closing rec_socket and arg->socket...\n");
 
-  if(NO_CONNECTION){
+  if(!NO_CONNECTION){
     ret = close(rec_socket);
     ERROR_HELPER(ret, "[RECV_UPDATES] Cannot close socket");
   }
@@ -730,6 +761,7 @@ int main(int argc, char* argv[]){
   WAITING_RESPONSE = 0; // non aspetto nessuna risposta da server
   USERNAME         = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
   USERNAME_CHAT    = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
+  USERNAME_REQUEST = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
 
   //initializing semaphores
   _initSemaphores();
@@ -775,12 +807,18 @@ int main(int argc, char* argv[]){
 
   //connection to server
   ret = connect(socket_desc, (struct sockaddr*) &serv_addr, sizeof(struct sockaddr_in));
-  ERROR_HELPER(ret, "[MAIN] Error trying to connect to server");
+  if(ret == -1 && (errno == ENETUNREACH || errno == ECONNREFUSED)){
+    fprintf(stdout, "[MAIN] Connection refused from host or no connection available\n");
+    GLOBAL_EXIT = 1;
+  }
+  else{
+    ERROR_HELPER(ret, "[MAIN] Error trying to connect to server");
+  }
 
-  fprintf(stdout, "[MAIN] connected to server\n");
+  if(!GLOBAL_EXIT) fprintf(stdout, "[MAIN] connected to server\n");
 
   //getting username from user
-  while(1){
+  while(!GLOBAL_EXIT){
     ret = get_username(USERNAME, socket_desc);
     if(ret==1){
       break;
@@ -865,7 +903,7 @@ int main(int argc, char* argv[]){
   }
 
   //sending disconnect command to server
-  send_msg(socket_desc, disconnect);
+  ret = send_msg(socket_desc, disconnect);
 
   ret = pthread_join(thread_usrl_recv, NULL);
 

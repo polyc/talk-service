@@ -8,8 +8,9 @@ typedef struct read_updates_args_s{
   GAsyncQueue* read_updates_mailbox;
 }read_updates_args_t;
 
-#define MSG_LEN 256
-#define MAIN_CMD_LEN 9
+#define MSG_LEN         256
+#define MAIN_CMD_LEN    9
+#define MAX_WAIT_SERVER 50
 
 #define CMD_STRING "\n<<Client commands>>\n\n<<list:    display chat list>>\n<<connect: connect to client>>\n<<help:    display available commands>>\n<<exit:    exit program>>\n<<clear:   clear screen>>\n\n"
 #define LIST       "list\n"
