@@ -59,16 +59,13 @@ int recv_msg(int socket, char *buf, size_t buf_len, int timer) {
 
 //free hash table value
 void free_user_list_element_value(gpointer data){
-  fprintf(stdout, "FREE1\n");
   free(((usr_list_elem_t*)data)->client_ip);
-  fprintf(stdout, "FREE2\n");
   free((usr_list_elem_t*)data);
   return;
 }
 
 //free hash table key
 void free_user_list_element_key(gpointer data){
-  fprintf(stdout, "FREE3\n");
   free((char*)data);
   return;
 }

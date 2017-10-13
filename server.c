@@ -541,7 +541,6 @@ void serialize_user_element(char* buf_out, usr_list_elem_t* elem, char* buf_user
   buf_out[1] = '\0';
   strncat(buf_out, "-", 1);
   strncat(buf_out, buf_username, USERNAME_BUF_SIZE);
-  fprintf(stdout, "[SERIALIZE]: maremma maiala\n");
 
   if(mod_command == DELETE){
     strncat(buf_out ,"-\n", 2);
