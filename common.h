@@ -5,8 +5,10 @@
 #define SERVER_PORT 2015
 #define CLIENT_THREAD_LISTEN_PORT 1025
 #define CLIENT_THREAD_RECEIVER_PORT 1026
-#define USERNAME_BUF_SIZE 17
+#define USERNAME_LENGTH 16
+#define USERNAME_BUF_SIZE 18
 #define USERLIST_BUFF_SIZE 7 + USERNAME_BUF_SIZE + INET_ADDRSTRLEN
+#define MSG_LEN 256
 #define POP_TIMEOUT 2000000
 
 //Glib hash manipulation macros
@@ -16,6 +18,7 @@
 #define REMOVE    g_hash_table_remove
 #define LOOKUP    g_hash_table_lookup
 #define FOR_EACH  g_hash_table_foreach
+#define DESTROY   g_hash_table_destroy
 
 //Glib AsyncQueue macros
 #define REF g_async_queue_ref
@@ -26,13 +29,17 @@
 #define UNLOCK g_async_queue_unlock
 
 //server commands macros
-#define AVAILABLE   'a'
-#define UNAVAILABLE 'u'
-#define DISCONNECT  'c'
-#define NEW         'n'
-#define MODIFY      'm'
-#define DELETE      'd'
-#define QUIT        'q'
+#define AVAILABLE              'a'
+#define UNAVAILABLE            'u'
+#define DISCONNECT             'c' //disconnecting from server
+#define NEW                    'n'
+#define MODIFY                 'm'
+#define DELETE                 'd'
+#define QUIT                   'q'
+#define MESSAGE                'x'
+#define CONNECTION_REQUEST     'r' //client wants to chat with someone
+#define CONNECTION_RESPONSE    's' //client's response to server, usually resended to another client
+#define EXIT                   "exit\n"
 
 #define GENERIC_ERROR_HELPER(cond, errCode, msg) do {             \
         if (cond) {                                               \

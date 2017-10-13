@@ -12,7 +12,7 @@
 
 
 
-void send_msg(int socket, char *buf) {
+int send_msg(int socket, char *buf) {
     int ret;
 
     int bytes_left = strlen(buf); //bruscolini al posto di pere ahahaha
@@ -22,14 +22,17 @@ void send_msg(int socket, char *buf) {
         ret = send(socket, buf + bytes_sent, bytes_left, 0);
 
         if (ret == -1 && errno == EINTR) continue;
+        else if(ret == -1 && errno == EPIPE) return -1; //sigpipe
+        else if(ret == -1 && (errno == ENETDOWN || errno == ENETUNREACH)) return -2;
         ERROR_HELPER(ret, "Errore nella scrittura su socket");
 
         bytes_left -= ret;
         bytes_sent += ret;
     }
+  return 0;
 }
 
-int recv_msg(int socket, char *buf, size_t buf_len) {
+int recv_msg(int socket, char *buf, size_t buf_len, int timer) {
     int ret;
     int bytes_read = 0;
 
@@ -38,7 +41,10 @@ int recv_msg(int socket, char *buf, size_t buf_len) {
         ret = recv(socket, buf + bytes_read, 1, 0);
 
         if (ret == 0) return -1; // client closed the socket
-        if (ret == -1 && errno == EINTR) continue;
+        else if(ret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) return -2;
+        else if(ret == -1 && errno == EINTR) continue;
+        else if(ret == -1 && errno == ECONNRESET) return -1;
+        else if(ret == -1 && errno == ENOTCONN) return -1;
         ERROR_HELPER(ret, "Errore nella lettura da socket");
 
         // controlling last bye read
@@ -64,11 +70,6 @@ void free_user_list_element_key(gpointer data){
   return;
 }
 
-void free_mailbox_list_element_value(gpointer data){
-  UNREF((GAsyncQueue*)data);
-  return;
-}
-
 //free mailbox entry
 void free_mailbox(gpointer data){
   free((char*)data);
@@ -81,10 +82,18 @@ GHashTable* usr_list_init(){
 }
 
 GHashTable* mailbox_list_init(){
-  GHashTable* mailbox = g_hash_table_new_full(g_str_hash, g_str_equal, (GDestroyNotify)free_user_list_element_key, (GDestroyNotify)free_mailbox_list_element_value);
+  GHashTable* mailbox = g_hash_table_new(g_str_hash, g_str_equal);
   return mailbox;
 }
 
 GAsyncQueue* mailbox_queue_init(){
   return g_async_queue_new_full((GDestroyNotify) free_mailbox);
+}
+
+GAsyncQueue* thread_queue_init(){
+  return g_async_queue_new();
+}
+
+GAsyncQueue* addresses_queue_init(){
+  return g_async_queue_new();
 }
