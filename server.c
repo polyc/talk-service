@@ -771,8 +771,20 @@ void* sender_routine(void* arg){
 
   int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(socket_desc, "Cannot create sender thread socket");
+
   ret = connect(socket_desc, (struct sockaddr*) &rec_addr, sizeof(struct sockaddr_in));
-  ERROR_HELPER(ret, "Error trying to connect to client receiver thread");
+  if(ret == -1){
+    //stop threads
+    if(errno == ECONNREFUSED){
+      *(args->threads_term) = 1;
+    }
+    else if(errno == ENETDOWN){
+      GLOBAL_EXIT = 1;
+    }
+    else{
+      ERROR_HELPER(ret, "Error trying to connect to client receiver thread");
+    }
+  }
 
   fprintf(stderr, "[SENDER THREAD]: conneso al receiver thread\n");
 
@@ -887,7 +899,7 @@ int main(int argc, char const *argv[]) {
   ret = sigaction(SIGINT, &actSIGINT, NULL);
   ERROR_HELPER(ret, "[MAIN]: Error in sigaction function");
 
-  actSIGPIPE.sa_handler = intHandler;
+  actSIGPIPE.sa_handler = SIG_IGN;
   actSIGPIPE.sa_mask = sa_mask;
   ret = sigaction(SIGPIPE, &actSIGPIPE, NULL);
   ERROR_HELPER(ret, "[MAIN]: Error in sigaction function");
