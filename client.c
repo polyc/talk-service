@@ -218,7 +218,7 @@ void connect_to(int socket, char* target_client){
   return;
 }
 
-void responde(int socket){
+void reply(int socket){
 
   int ret;
 
@@ -870,7 +870,7 @@ int main(int argc, char* argv[]){
     }
 
     else if(buf_commands[0] == CONNECTION_RESPONSE){
-      responde(socket_desc);
+      reply(socket_desc);
       my_flush();
       continue;
     }
