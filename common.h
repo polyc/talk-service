@@ -1,29 +1,61 @@
-//included libraries
-#include <errno.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <signal.h>
-#include <unistd.h>
+#ifndef __COMMON_H__
+#define __COMMON_H__
 
-//data structure passed to threads on creation
-typedef struct thread_args_s{
-  unsigned int process_id;
-  unsigned int thread_id;
-} thread_args_t;
+#define SERVER_IP "127.0.0.1"
+#define SERVER_PORT 2015
+#define CLIENT_THREAD_LISTEN_PORT 1025
+#define CLIENT_THREAD_RECEIVER_PORT 1026
+#define USERNAME_LENGTH 16
+#define USERNAME_BUF_SIZE 18
+#define USERLIST_BUFF_SIZE 7 + USERNAME_BUF_SIZE + INET_ADDRSTRLEN
+#define MSG_LEN 256
+#define POP_TIMEOUT 2000000
 
-// client listen thread's info-struct into generic user list
-typedef struct listen_thread_s{
-  int socket;
-  struct sockaddr_in* address;
-} listen_thread_t;
+//Glib hash manipulation macros
+#define INSERT    g_hash_table_insert
+#define REPLACE   g_hash_table_replace
+#define CONTAINS  g_hash_table_contains
+#define REMOVE    g_hash_table_remove
+#define LOOKUP    g_hash_table_lookup
+#define FOR_EACH  g_hash_table_foreach
+#define DESTROY   g_hash_table_destroy
 
-// send/receive user list buffer slot's typical handled element
-typedef struct user_list_buffer_s{
-  char[16] user_name;
-  struct listen_thread_t listen_thread;
-  short user_elem_pos;
+//Glib AsyncQueue macros
+#define REF g_async_queue_ref
+#define UNREF g_async_queue_unref
+#define PUSH g_async_queue_push
+#define POP g_async_queue_timeout_pop
+#define LOCK g_async_queue_lock
+#define UNLOCK g_async_queue_unlock
+
+//server commands macros
+#define AVAILABLE              'a'
+#define UNAVAILABLE            'u'
+#define DISCONNECT             'c' //disconnecting from server
+#define NEW                    'n'
+#define MODIFY                 'm'
+#define DELETE                 'd'
+#define QUIT                   'q'
+#define MESSAGE                'x'
+#define CONNECTION_REQUEST     'r' //client wants to chat with someone
+#define CONNECTION_RESPONSE    's' //client's response to server, usually resended to another client
+#define EXIT                   "exit\n"
+
+#define GENERIC_ERROR_HELPER(cond, errCode, msg) do {             \
+        if (cond) {                                               \
+            fprintf(stderr, "%s: %s\n", msg, strerror(errCode));  \
+            exit(EXIT_FAILURE);                                   \
+        }                                                         \
+    } while(0)
+
+#define ERROR_HELPER(ret, msg)          GENERIC_ERROR_HELPER((ret < 0), errno, msg)
+#define PTHREAD_ERROR_HELPER(ret, msg)  GENERIC_ERROR_HELPER((ret != 0), ret, msg)
+
+
+//user list typical element
+typedef struct usr_list_elem_s{
+  char* client_ip;
   char a_flag;
-}user_list_buffer_t;
+}usr_list_elem_t;
+
+#endif
