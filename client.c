@@ -933,6 +933,8 @@ int main(int argc, char* argv[]){
 
   free(USERNAME);
   free(USERNAME_CHAT);
+  free(USERNAME_REQUEST);
+  free(USERNAME_RESPONSE);
   free(buf_commands);
   free(user_buf);
   free(thread_usrl_recv_args);

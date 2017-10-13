@@ -35,5 +35,5 @@ void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName,
 void list_command();
 void send_message(int socket);
 void connect_to(int socket, char* target_client);
-void responde(int socket);
+void reply(int socket);
 void display_commands();
