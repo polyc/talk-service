@@ -28,6 +28,7 @@ GHashTable* user_list;
 char* USERNAME;
 char* USERNAME_CHAT;
 char* USERNAME_REQUEST;
+char* USERNAME_RESPONSE;
 char* buf_commands;
 static volatile int   IS_CHATTING;      // 0 se non connesso 1 se connesso
 static volatile int   WAITING_RESPONSE; // 0 se non sta aspettando una risposta dal server 1 altrimenti
@@ -223,8 +224,9 @@ void responde(int socket){
 
   if(((buf_commands[1]=='y' || buf_commands[1]=='n') && strlen(buf_commands)==3)){
 
-    if(buf_commands[1] == 'y'){
+    if(buf_commands[0]== CONNECTION_RESPONSE && buf_commands[1] == 'y'){
       IS_CHATTING = 1;
+      strncpy(USERNAME_CHAT, USERNAME_RESPONSE, strlen(USERNAME_RESPONSE));
     }
     else{
       IS_CHATTING = 0;
@@ -246,7 +248,7 @@ void responde(int socket){
 
   else{
     fprintf(stdout, "[MAIN] Wrong input for connetion response. Insert y/n....\n");
-    memset(buf_commands+1, 0, MSG_LEN);
+    memset(buf_commands+1, 0, MSG_LEN-1);
     return;
   }
 
@@ -370,13 +372,24 @@ void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command){
   else{
 
     if(strcmp(buf_userName, USERNAME_CHAT)==0){
+      fprintf(stdout, "1\n");
       IS_CHATTING = 0;
     }
 
     else if(strcmp(buf_userName, USERNAME_REQUEST)==0){
+      fprintf(stdout, "2\n");
       //ublocking &wait_response
       ret = sem_post(&wait_response);
       ERROR_HELPER(ret, "[READ_UPDATES] Error in sem_post on &wait_response semaphore");
+    }
+
+  //  fprintf(stdout, "USERNAME_RESPONSE: %s\n", buf_userName);
+  //  fprintf(stdout, "USERNAME_RESPONSE: %s\n", USERNAME_RESPONSE);
+
+    else if(strcmp(buf_userName, USERNAME_RESPONSE)==0){
+      fprintf(stdout, "USERNAME_RESPONSE: %s\n", buf_userName);
+      buf_commands[0] = 0;
+      memset(USERNAME_RESPONSE, 0, USERNAME_BUF_SIZE);
     }
 
     ret = REMOVE(user_list, (gpointer)buf_userName);
@@ -510,11 +523,11 @@ void* read_updates(void* args){
 
     else if(elem_buf[0] == CONNECTION_REQUEST){
 
+      strncpy(USERNAME_RESPONSE, elem_buf+1, strlen(elem_buf)-1);
+
       fprintf(stdout, "[READ_UPDATES] Connection request from [%s] accept [y] refuse [n]: \n", elem_buf+1);
 
       buf_commands[0] = CONNECTION_RESPONSE;
-
-      strncpy(USERNAME_CHAT, elem_buf+1, strlen(elem_buf)-1);
 
       free(elem_buf);
 
@@ -756,12 +769,13 @@ int main(int argc, char* argv[]){
   //arming signals
   _initSignals();
 
-  IS_CHATTING      = 0; // non sono connesso a nessuno per adesso
-  GLOBAL_EXIT      = 0;
-  WAITING_RESPONSE = 0; // non aspetto nessuna risposta da server
-  USERNAME         = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
-  USERNAME_CHAT    = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
-  USERNAME_REQUEST = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
+  IS_CHATTING       = 0; // non sono connesso a nessuno per adesso
+  GLOBAL_EXIT       = 0;
+  WAITING_RESPONSE  = 0; // non aspetto nessuna risposta da server
+  USERNAME          = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
+  USERNAME_CHAT     = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
+  USERNAME_REQUEST  = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
+  USERNAME_RESPONSE = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
 
   //initializing semaphores
   _initSemaphores();
