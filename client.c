@@ -231,7 +231,7 @@ void reply(int socket){
       IS_CHATTING = 0;
     }
 
-    strncpy(buf_commands+2, USERNAME_CHAT, strlen(USERNAME_CHAT)); //USERNAME_CHAT o USERNAME...CONTROLLARE!!
+    strncpy(buf_commands+2, USERNAME_RESPONSE, strlen(USERNAME_RESPONSE)); //USERNAME_CHAT o USERNAME...CONTROLLARE!!
     buf_commands[strlen(buf_commands)]   = '\n';
     buf_commands[strlen(buf_commands)+1] = '\0';
 
