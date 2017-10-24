@@ -53,15 +53,17 @@ Scelte progettuali:
     una volta catturato uno di questi segnali il main thread aspetta che tutti i thread siano terminati "gracefully" e invia un messaggio di disconnessione al server.
 
   * Le strutture dati del client sono:
-      <code>user_list</code> una Hash Table aggiornata in tempo reale contenente il nome, indirizzo IP e disponibilita' di ogni client connesso al server protetta da un semaforo
-      <code>mail_box</code>  una mail box contente tutti i messaggi ricevuti dal server thread safe
+
+      <code>user_list</code> una Hash Table aggiornata in tempo reale contenente il nome, indirizzo IP e disponibilita' di ogni client connesso al server protetta da un semaforo.
+
+      <code>mail_box</code>  una mail box contente tutti i messaggi ricevuti dal server thread safe.
 
   * Rappresentazione degli stati del client tramite variabili globali.
 
   Comandi disponibili per l'utente:
 
-  * <code>connect</code> : chiede all'utente a quale client connettersi e inoltra una richiesta di chat verso l'utenteidentificato
-  * <code>list</code>    : stampa a schermo la lista aggiornata in tempo reale dei client connessi al server
-  * <code>clear</code>   : pulisce lo schermo
-  * <code>exit</code>    : invia un segnale di disconnessione al server e chiude il client
-  * <code>help</code>    : stampa a schermo la lista dei comandi disponibili
+  * <code>connect</code> : chiede all'utente a quale client connettersi e inoltra una richiesta di chat verso l'utente identificato.
+  * <code>list</code>    : stampa a schermo la lista aggiornata in tempo reale dei client connessi al server.
+  * <code>clear</code>   : pulisce lo schermo.
+  * <code>exit</code>    : invia un segnale di disconnessione al server e chiude il client.
+  * <code>help</code>    : stampa a schermo la lista dei comandi disponibili.
