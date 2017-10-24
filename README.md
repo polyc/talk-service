@@ -21,10 +21,10 @@ Scelte progettuali:
       il primo semafore viene usato per il timing delle operazioni, l'altro per determinare la terminazione del Sender thread notificata dal Connection handler. La variabile invece serve a notificare la necessità di terminare al Connection handler da parte del Sender thread nel caso di un SIGPIPE.
 
   * Il server gestisce i seguenti segnali:
-    -SIGTERM
-    -SIGINT
-    -SIGHUP
-    -SIGPIPE
+    - SIGTERM
+    - SIGINT
+    - SIGHUP
+    - SIGPIPE
 
     -Quando viene catturato SIGPIPE, la coppia di thread a causa della quale è avvenuta la segnalazione termina "gracefully".
 
@@ -46,15 +46,15 @@ Scelte progettuali:
   * Ad ogni modifica della lista dei client connessi, il server notifica il thread di ricezione dei messagi del client cheaggiorna la sua lista utenti.
 
   * Il client gestisce i seguenti segnali:
-    -SIGTERM
-    -SIGINT
-    -SIGHUP
-    -SIGPIPE
-    una volta catturato uno di questi segnali il main thread aspetta che tutti i thread siano terminati "gracefully" e inviaun messaggio di disconnessione al server.
+    - SIGTERM
+    - SIGINT
+    - SIGHUP
+    - SIGPIPE
+    una volta catturato uno di questi segnali il main thread aspetta che tutti i thread siano terminati "gracefully" e invia un messaggio di disconnessione al server.
 
   * Le strutture dati del client sono:
-      <code>user_list<code> una Hash Table aggiornata in tempo reale contenente il nome, indirizzo IP e disponibilita' diogni client connesso al server protetta da un semaforo
-      <code>mail_box<code>  una mail box contente tutti i messaggi ricevuti dal server thread safe
+      <code>user_list</code> una Hash Table aggiornata in tempo reale contenente il nome, indirizzo IP e disponibilita' di ogni client connesso al server protetta da un semaforo
+      <code>mail_box</code>  una mail box contente tutti i messaggi ricevuti dal server thread safe
 
   * Rappresentazione degli stati del client tramite variabili globali.
 
