@@ -395,7 +395,7 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
       strcpy(message_buf+2, args->client_user_name);
 
       size_buf = strlen(message_buf);
-      message_buf[size_buf] = '\n';
+      message_buf[size_buf]   = '\n';
       message_buf[size_buf+1] = '\0';
 
       //push_entry_args preparation
@@ -464,6 +464,7 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
         notify(message_buf, args->client_user_name, &mod_command, element_to_update);
 
         //SWAPPING USERNAME, SO TARGET CLIENT WILL KNOW WHO SENDED THE REQUEST
+        message_buf[0] = CONNECTION_REQUEST;
         memset(message_buf + 1, 0, strlen(message_buf)-1);
         strcpy(message_buf + 1, args->client_user_name);
 
