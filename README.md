@@ -13,11 +13,11 @@ Scelte progettuali:
     - Connection handler thread:
       si occupa di ricevere lo username dal client e di validarlo. In caso di username non corretto, lo comunica al client e ne aspetta uno nuovo. Tale thread poi si occupa di gestire i comandi inviati dal client e di generare un altro thread, che si occupa di notificare i client in "tempo reale" inviando messaggi custom. Essi possono essere richieste di connessione con un altro client, risposte a tali richieste e messaggi effetivi scambiati tra client enotifiche di vario genere mirate ad aggiornare le user-list presenti nei vari client.
 
-    -Sender thread:
+    - Sender thread:
       il thread in questione riceve messaggi su una mailbox personale a cui ha accesso il relativo connection
       handler. Una volta estratto il messaggio dalla coda, lo invia al relativo client.
 
-    -La sincronizzazione tra i due thread avviene tramite una coppia di semafori binari e una variabile visibile solo alla coppia stessa:
+    - La sincronizzazione tra i due thread avviene tramite una coppia di semafori binari e una variabile visibile solo alla coppia stessa:
       il primo semafore viene usato per il timing delle operazioni, l'altro per determinare la terminazione del Sender thread notificata dal Connection handler. La variabile invece serve a notificare la necessità di terminare al Connection handler da parte del Sender thread nel caso di un SIGPIPE.
 
   * Il server gestisce i seguenti segnali:
@@ -26,7 +26,7 @@ Scelte progettuali:
     -SIGHUP
     -SIGPIPE
 
-    -Quando viene catturato SIGPIPE, termina "gracefully" la coppia di thread a causa della quale è avvenuta la segnalazione.
+    -Quando viene catturato SIGPIPE, la coppia di thread a causa della quale è avvenuta la segnalazione termina "gracefully".
 
     -Negli altri casi il main thread aspetta che tutti i thread siano terminati "gracefully" e termina.
 
@@ -35,3 +35,33 @@ Scelte progettuali:
       <code>user_list</code>: Hash table contenente le strutture dati necessarie a rapresentare ogni singolo client connesso al servizio. L'accesso è regolato da un semaforo binario globale.
 
       <code>mailbox_list</code>: Hash table contenente le mailbox dei Sender thread su cui inviare i messaggi da spedire. Ogni mailbox è una coda asincrona thread safe.
+
+## client
+  Scelte progettuali:
+
+  * Client Multithread e shell utente che gestisce dei comandi user.
+
+  * Il client intergisce con il server attraverso dei comandi integrati nel client.
+
+  * Ad ogni modifica della lista dei client connessi, il server notifica il thread di ricezione dei messagi del client cheaggiorna la sua lista utenti.
+
+  * Il client gestisce i seguenti segnali:
+    -SIGTERM
+    -SIGINT
+    -SIGHUP
+    -SIGPIPE
+    una volta catturato uno di questi segnali il main thread aspetta che tutti i thread siano terminati "gracefully" e inviaun messaggio di disconnessione al server.
+
+  * Le strutture dati del client sono:
+      <code>user_list<code> una Hash Table aggiornata in tempo reale contenente il nome, indirizzo IP e disponibilita' diogni client connesso al server protetta da un semaforo
+      <code>mail_box<code>  una mail box contente tutti i messaggi ricevuti dal server thread safe
+
+  * Rappresentazione degli stati del client tramite variabili globali.
+
+  Comandi disponibili per l'utente:
+
+  * <code>connect</code> : chiede all'utente a quale client connettersi e inoltra una richiesta di chat verso l'utenteidentificato
+  * <code>list</code>    : stampa a schermo la lista aggiornata in tempo reale dei client connessi al server
+  * <code>clear</code>   : pulisce lo schermo
+  * <code>exit</code>    : invia un segnale di disconnessione al server e chiude il client
+  * <code>help</code>    : stampa a schermo la lista dei comandi disponibili
