@@ -543,10 +543,10 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
 
 
     case MESSAGE:
+      
+      //-----------------------SEARCH FOR TARGET MAILBOX----------------------
       ret = sem_wait(&mailbox_list_mutex);
       ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on mailbox_list_mutex");
-
-      //search for target mailbox
       target_mailbox = NULL;
       value = &target_mailbox;
       ret = g_hash_table_lookup_extended(mailbox_list, (gconstpointer)target_buf, NULL, (gpointer*)value);
@@ -555,12 +555,13 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
       ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on mailbox_list_mutex");
 
       fprintf(stdout, "[CONNECTION THREAD]: MESSAGE = %s\n", message_buf);
-
-      //these operations need to be hidden
+      
+      //------------------------------PUSH MESSAGE----------------------------
       size_buf = strlen(message_buf);
       message_buf[size_buf] = '\n';
       message_buf[size_buf+1] = '\0';
-
+      
+      //push_entry_args preparation
       p_args = (push_entry_args_t*)malloc(sizeof(push_entry_args_t));
       p_args->message = message_buf;
       p_args->sender_username = args->client_user_name;
@@ -568,7 +569,7 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
       push_entry(target_buf, target_mailbox, p_args); //push chat message in target mailbox
       free(p_args);
 
-      //check exit condition
+      //-----------------------CHECK EXIT CHAT CONDITION----------------------
       if(strcmp(message_buf + 1, EXIT) == 0){
 
         update_availability(element_to_update, AVAILABLE); //set this client available
@@ -597,7 +598,7 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
 
         usr_list_elem_t*  element = (usr_list_elem_t*)LOOKUP(user_list, target_buf);
         if (element!= NULL && element->a_flag == UNAVAILABLE) {
-          update_availability(element, AVAILABLE);
+          update_availability(element, AVAILABLE); //set target available
         }
 
         ret = sem_post(&user_list_mutex);
