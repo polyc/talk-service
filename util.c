@@ -15,7 +15,7 @@
 int send_msg(int socket, char *buf) {
     int ret;
 
-    int bytes_left = strlen(buf); //bruscolini al posto di pere ahahaha
+    int bytes_left = strlen(buf);
     int bytes_sent = 0;
 
     while (bytes_left > 0) {
@@ -36,7 +36,7 @@ int recv_msg(int socket, char *buf, size_t buf_len, int timer) {
     int ret;
     int bytes_read = 0;
 
-    // messages longer that buf_len wont be read all
+    // messages longer than buf_len wont be read all
     while (bytes_read <= buf_len) {
         ret = recv(socket, buf + bytes_read, 1, 0);
 
