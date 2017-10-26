@@ -33,10 +33,10 @@ Scelte progettuali:
 
   * Strutture dati del server:
 
-      <code>user_list</code>: Hash table contenente le strutture dati necessarie a rapresentare ogni singolo client connesso al servizio. L'accesso è regolato da un semaforo binario globale.
+      <code>user_list</code>: Hash table contenente le strutture dati necessarie a rapresentare ogni singolo client connesso al servizio, la chiave d'accesso è lo username univoco scelto dal client. L'accesso è regolato da un semaforo binario globale.
       Ogni elemento della lista è rappresentato da una struct, la quale ha come campi l'indirizzo ip del client in forma dotted e un flag di disponibilità. Attraverso il flag vengono effettuati (lato server) i controlli necessari affinchè l'integrità del servizio non venga compromesso durante la gestione delle varie attività.
 
-      <code>mailbox_list</code>: Hash table contenente le mailbox dei Sender thread su cui inviare i messaggi da spedire. Ogni mailbox è una coda asincrona thread safe che contiene stringe codificate precedentemente dal connection handler thread.
+      <code>mailbox_list</code>: Hash table contenente le mailbox dei Sender thread su cui inviare i messaggi da spedire, anche qui la chiave d'accesso è lo username. Ogni mailbox è una coda asincrona thread safe che contiene stringhe codificate precedentemente dal connection handler thread.
 
 ## client
   Scelte progettuali:
