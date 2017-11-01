@@ -628,8 +628,9 @@ void* read_updates(void* args){
     //alla funzione di aggiornamento della user list update_list()
     update_list(userName, elem, command);
 
-    if(command[0] == MODIFY){
+    if(command[0] == MODIFY || command[0] == DELETE){
       free(elem->client_ip);
+      free(userName);
       free(elem);
     }
 
