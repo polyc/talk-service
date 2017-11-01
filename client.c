@@ -25,16 +25,17 @@ sem_t sync_userList;
 sem_t wait_response;
 GHashTable* user_list;
 
-char* USERNAME;
-char* USERNAME_CHAT;
-char* USERNAME_REQUEST;
-char* USERNAME_RESPONSE;
+char* USERNAME;          //buffer contenente lo username del client
+char* USERNAME_CHAT;     //buffer contenente lo useranem del client con cui sto chattando
+char* USERNAME_REQUEST;  //buffer contenente lo username del client a cui ho fatto la richiesta di connessione
+char* USERNAME_RESPONSE; //buffer contenente lo username del client che mi ha inviato una richiesta di connessione
 char* buf_commands;
 static volatile int   IS_CHATTING;      // 0 se non connesso 1 se connesso
 static volatile int   WAITING_RESPONSE; // 0 se non sta aspettando una risposta dal server 1 altrimenti
+static volatile int   IS_RESPONDING;    // 1 se sta aspettando che lo user accetti o no la connessione 0 altrimenti
 static sig_atomic_t   GLOBAL_EXIT;      // 1 se bisogna interrompere il programma 0 altrimenti
 
-
+//handler di segnale per SIGHUP SIGINT SIGTERM SIGPIPE
 void sigHandler(int sig){
 
   fprintf(stdout, "\n<<<<<<CATCHED SIGNAL>>>>>>\n");
@@ -49,7 +50,7 @@ void _initSignals(){
   int ret;
 
   sigset_t mask;
-  struct sigaction sigint_act, sigpipe_act, sigterm_act;
+  struct sigaction sigint_act, sigpipe_act, sigterm_act, sighup_act;
 
   memset(&sigint_act,  0, sizeof(struct sigaction));
   memset(&sigpipe_act, 0, sizeof(struct sigaction));
@@ -82,6 +83,14 @@ void _initSignals(){
   ret = sigaction(SIGTERM, &sigterm_act, NULL);
   ERROR_HELPER(ret, "[MAIN] Error in sigaction function");
 
+  //SIGHUP
+  sighup_act.sa_mask    = mask;
+  sighup_act.sa_flags   = 0;
+  sighup_act.sa_handler = sigHandler;
+
+  ret = sigaction(SIGHUP, &sighup_act, NULL);
+  ERROR_HELPER(ret, "[MAIN] Error in sigaction function");
+
   return;
 
 }
@@ -89,8 +98,6 @@ void _initSignals(){
 void _initSemaphores(){
 
   int ret;
-
-  fprintf(stdout, "[MAIN] initializing semaphores...\n");
 
   //creating sempahore for listen function in usrl_liste_thread_routine for bind action
   ret = sem_init(&sync_receiver, 0, 0);
@@ -104,15 +111,7 @@ void _initSemaphores(){
   ret = sem_init(&sync_userList, 0, 1);
   ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_userList semaphore");
 
-  fprintf(stdout, "[MAIN] semaphores initialized correctly\n");
-
   return;
-}
-
-void my_flush(){
-  int c;
-  if((c = feof(stdin)) == 0) return;
-  while ((c = getchar()) != '\n' );
 }
 
 static void print_userList(gpointer key, gpointer elem, gpointer data){
@@ -145,6 +144,7 @@ void list_command(){
 
   int ret;
 
+  //utilizzo il semaforo sync_userList per l'accesso alla GLibHashTable
   ret = sem_wait(&sync_userList);
   ERROR_HELPER(ret, "[CONNECT_ROUTINE] Error in wait function on sync_userList semaphore\n");
 
@@ -157,26 +157,34 @@ void list_command(){
 
 void send_message(int socket){
 
-  int ret;
+  //il client si trova nello stato IS_CHATTING
 
-  buf_commands[0] = MESSAGE; //per il parsing per i messaggi
+  int ret, len;
 
-  buf_commands[strlen(buf_commands)]   = '\n';
-  buf_commands[strlen(buf_commands)+1] = '\0';
+  //indico al server che il messaggio che gli arriva e' un messaggio di chat
+  buf_commands[0] = MESSAGE;
+  len = strlen(buf_commands);
+  buf_commands[len-1] = '\n';
+  buf_commands[len]   = '\0';
+
+  //invio messaggio al server
   ret = send_msg(socket, buf_commands);
+  //server morto, client termina
   if(ret == -2){
     GLOBAL_EXIT = 1;
     return;
   }
 
-  //fprintf(stdout, "[MAIN] buf_commands = %s\n", buf_commands);
-
-  if(strcmp(buf_commands,"xexit\n\n")==0){
+  //se il messaggio inviato al server era EXIT esco dallo stato IS_CHATTING
+  //pulisco tutto buf_commands
+  if(strncmp(buf_commands+1, EXIT, strlen(buf_commands+1))==0){
     IS_CHATTING = 0;
     memset(buf_commands, 0, MSG_LEN);
     return;
   }
 
+  //preparo buf_commands a prendere da input un nuovo messaggio di chat
+  //il primo byte rimane MESSAGE
   memset(buf_commands+1, 0, MSG_LEN-1);
   return;
 }
@@ -185,34 +193,39 @@ void connect_to(int socket, char* target_client){
 
   int ret;
 
+  //entro nello stato WAITING_RESPONSE
   WAITING_RESPONSE = 1;
 
-  fprintf(stdout, "[MAIN] Connect to: ");
+  fprintf(stdout, "Connect to: ");
 
+  //primo byte di target_client e' CONNECTION_REQUEST cosi il server sa che e'
+  //una richiesta di connessione ad un altro client
   target_client[0] = CONNECTION_REQUEST;
 
-  fgets(target_client+1, MSG_LEN-1, stdin);  //prende lo username
-
+  //prende lo username da terminale
+  fgets(target_client+1, MSG_LEN-1, stdin);
+  //riempio USERNAME_REQUEST con lo username indicato dall'utente
   strncpy(USERNAME_REQUEST, target_client+1, strlen(target_client)-2);
-  fprintf(stdout, "[MAIN] USERNAME_REQUEST: %s\n", USERNAME_REQUEST);
 
-  //sending chat username to server
+  //invio la richiesta di connessione a USERNAME_REQUEST al server
   ret = send_msg(socket, target_client);
-  fprintf(stdout, "RET VALUE IS: %d and ERRNO: %s\n", ret, strerror(errno));
+  //server morto, client termina
   if(ret == -2){
     GLOBAL_EXIT = 1;
     return;
   }
 
-  memset(buf_commands,  0, MSG_LEN);
+  //pulisco i buffer buf_commands e target_client per prossimi input
+  memset(buf_commands+1,  0, MSG_LEN-1);
   memset(target_client, 0, MSG_LEN);
 
-  //waiting for usrl_liste_thread_routine to bind address to socket and to listen
+  //aspetto una risposta dal server riguardo la mia richiesta di connessione
   ret = sem_wait(&wait_response);
   ERROR_HELPER(ret, "[MAIN] Error in sem_wait wait_response");
 
+  //risposta arrivata esco dallo stato WAITING_RESPONSE ed entro nello stato IS_CHATTING
+  //pulisco USERNAME_REQUEST per future richieste di connessione
   memset(USERNAME_REQUEST, 0, USERNAME_BUF_SIZE);
-
   WAITING_RESPONSE = 0;
 
   return;
@@ -222,32 +235,46 @@ void reply(int socket){
 
   int ret;
 
+  //input preso su buf_commands
+  //controllo sull'input
   if(((buf_commands[1]=='y' || buf_commands[1]=='n') && strlen(buf_commands)==3)){
 
+    //ho accettato la connessione
     if(buf_commands[0]== CONNECTION_RESPONSE && buf_commands[1] == 'y'){
-      IS_CHATTING = 1;
+      IS_RESPONDING = 0; //esco dallo stato IS_RESPONDING
+      IS_CHATTING = 1;   //entro nello stato IS_CHATTING
+      //lo USERNAME_RESPONSE diviene USERNAME_CHAT
       strncpy(USERNAME_CHAT, USERNAME_RESPONSE, strlen(USERNAME_RESPONSE));
     }
+    //ho rifiutato la connessione
     else{
-      IS_CHATTING = 0;
+      IS_RESPONDING = 0; //esco dallo stato IS_RESPONDING
+      IS_CHATTING   = 0;   //mi accerto che lo stato non sia IS_CHATTING
     }
 
-    strncpy(buf_commands+2, USERNAME_CHAT, strlen(USERNAME_CHAT)); //USERNAME_CHAT o USERNAME...CONTROLLARE!!
-    buf_commands[strlen(buf_commands)] = '\n';
+    //copio USERNAME_RESPONSE per rispondere alla sua richiesta di connessione
+    strncpy(buf_commands+2, USERNAME_RESPONSE, strlen(USERNAME_RESPONSE));
+    buf_commands[strlen(buf_commands)]   = '\n';
     buf_commands[strlen(buf_commands)+1] = '\0';
 
+    //invio al server buf_commands indicando che e' un comando di risposta ad una
+    //richiesta di connessione contenente la risposta e lo username del client
+    //che ha effettutato la richiesta di connessione
     ret = send_msg(socket, buf_commands);
+    //il server e' morto, il client termina
     if(ret == -2){
       GLOBAL_EXIT = 1;
       return;
     }
-
+    //pulisco buf_commands cosi da poter prendere altri input da utente
     memset(buf_commands, 0, MSG_LEN);
     return;
   }
-
+  //input da utente sbagliato viene pulito buf_commands dal secondo byte in poi
+  //il primo byte rimane CONNECTION_RESPONSE e viene chiesto allo user di inserire
+  //una risposta valida y/n
   else{
-    fprintf(stdout, "[MAIN] Wrong input for connetion response. Insert y/n....\n");
+    fprintf(stdout, "Wrong input for connetion response. Insert y/n....\n");
     memset(buf_commands+1, 0, MSG_LEN-1);
     return;
   }
@@ -256,149 +283,164 @@ void reply(int socket){
 
 int get_username(char* username, int socket){
 
-  //changed USERNAME_BUF_SIZE + 1 because fgets puts in buffer the \n character
-  //if there are problems take away +1
+  int i = 0, ret, length;
 
-  int i = 0, ret;
+  fprintf(stdout, "Enter username(max 16 char): ");
 
-  fprintf(stdout, "[GET_USERNAME] Enter username(max 16 char): ");
-
-  username = fgets(username, USERNAME_LENGTH + 1, stdin);
+  //fgets su buffer di 256 per controllare input dell'utente
+  username = fgets(username, 256, stdin);
+  length   = strlen(username);
 
   if(GLOBAL_EXIT){
     return 1;
   }
 
-
-  char* newLine = strchr(username, '\n');
-  if(newLine == NULL){
-    username[USERNAME_LENGTH] = '\n';
-    username[USERNAME_LENGTH + 1] = '\0';
-
-    my_flush();
-  }
-  else{
-    int size = strlen(username);
-    username[size-1] = '\n';
-    username[size] = '\0';
+  //----------------------CONTROLLO USERNAME------------------------------------
+  //
+  //se lunghezza del buffer di input e' maggiore o uguale di 255 allora puo essere
+  //che il buffer di sistema stdin sia stato sporcato e la prossima fgets avrebbe un comportamente anomalo
+  //il programma termina
+  else if(length>=255){
+    GLOBAL_EXIT = 1;
+    fprintf(stdout, "\nUser input excessively long...closing program\n");
+    return 1;
   }
 
-  //checking if username contains '-' character
-  for(i=0; i < strlen(username); i++){
+  //se la lunghezza delll'input super quella consentita per lo username ritorna 0
+  else if(length>16){
+    //username troppo lungo ritorno 0
+    return 0;
+  }
+
+  //aggiunta di terminatore di stringa
+  username[length]   = '\0';
+
+  //controllo per carattere non consentito '-'
+  for(i=0; i < length; i++){
     if(username[i]=='-'){
-      fprintf(stdout, "[GET_USERNAME] Char '-' found in username ... input correct username\n");
-      fflush(stdin);
-      return 0; //contains '-' character, username not ok return 0
+      fprintf(stdout, "Char '-' found in username this char is not allowed in a username\n");
+      //username contiene il carattere '-' ritorno 0
+      return 0;
     }
   }
+  //
+  //----------------------------------------------------------------------------
 
-  //sending buffer init data for user list
-  //creating buffer for username and availability flag
+
+  //----------------------------INVIO USERNAME----------------------------------
+  //
+  //allocazione buffer di invio dello username al server
   char* buf = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
-  strncpy(buf, username, strlen(username));
+  strncpy(buf, username, length);
 
-  //sending username to server
+  //invio dello username al server
   ret = send_msg(socket, buf);
-  //fprintf(stdout, "SEND_USERNAME RET: %d ERRNO: %s\n", ret, strerror(errno));
+  //se ret = -2 il server e' morto, il client termina
   if(ret == -2){
     GLOBAL_EXIT = 1;
     return 1;
   }
+  //
+  //----------------------------------------------------------------------------
 
-  fprintf(stdout, "[GET_USERNAME] sent username [%s] to server\n", buf);
 
-  //checking if username already in use
+  //--------------ASPETTO CONFERMA DI DISPONIBILITA' DAL SERVER-----------------
+  //
+  //pulisco buffer di invio per essere usato in ricezione
   memset(buf, 0, USERNAME_BUF_SIZE);
+  ret = recv_msg(socket, buf, 3);
 
-  ret = recv_msg(socket, buf, 3); //senza connessione internet si blocca qui
-
-  //fprintf(stdout, "RECV RET: %d ERRNO: %s\n", ret, strerror(errno));
-
+  //server e' morto il client termina
   if(ret == -1){
     GLOBAL_EXIT = 1;
     free(buf);
     return 1;
   }
+  //
+  //----------------------------------------------------------------------------
 
-  fprintf(stdout, "[GET_USERNAME] Username available? [%c]\n", buf[0]);
-
+  //controllo messaggio ricevuto dal server riguardo la disponibilita' dello username
   if(buf[0] == UNAVAILABLE){
     free(buf);
-    //fflush(stdin);
-    return 0; //username not ok
+    fprintf(stdout, "This username is already in use...choose a different username\n");
+    //username non disponibile, gia in uso da un altro client
+    return 0;
   }
 
+  //altrimenti username disponibile
   free(buf);
-  //fflush(stdin);
-  username[strlen(username)-1] = '\0';
-  return 1; //usrname ok
+  username[length-1] = '\0';
+  return 1;
 }
 
 void display_commands(){
+  //stampa della stringa dei comandi, vedere client.h
   fprintf(stdout, CMD_STRING);
   return;
 }
 
-//mettere uno switch e' piu' mejo!
 void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command){
 
   int ret;
 
+  //********************AGGIORNAMENTO DELLA USER LIST***************************
+  //
+  /*
+    Aggiornamento dell user list in base al comando mod_command passato in argomento
+  */
+  //****************************************************************************
+
+  //blocco accesso alla user list attraverso sync_userList, entro in sezione critica
   ret = sem_wait(&sync_userList);
   ERROR_HELPER(ret, "[UPDATE_LIST] Error in wait function on sync_userList semaphore\n");
 
-  //distiguere tra modify new e delete se e' modify usare LOOKUP
+  //caso di aggiunta di nuovo elemento alla lista
   if(mod_command[0] == NEW){
+
     INSERT(user_list, (gpointer)buf_userName, (gpointer)elem);
-
-    fprintf(stdout, "[UPDATE_LIST] created new entry in user list\n");
-
+    //esco dalla sezione critica
     ret = sem_post(&sync_userList);
     ERROR_HELPER(ret, "[UPDATE_LIST] Error in post function on sync_userList semaphore\n");
 
     return;
   }
+  //caso di modifica di un elemento della lista
   else if(mod_command[0] == MODIFY){
+    //estraggo il puntatore all'elemento della user list e ne modifico il flag di disponibilita'
     usr_list_elem_t* element = (usr_list_elem_t*)LOOKUP(user_list, (gconstpointer)buf_userName);
     element->a_flag = elem->a_flag;
-
-    fprintf(stdout, "[UPDATE_LIST] modified entry [%s] in user list\n", buf_userName);
-
+    //esco dalla sezione critica
     ret = sem_post(&sync_userList);
     ERROR_HELPER(ret, "[UPDATE_LIST] Error in post function on sync_userList semaphore\n");
 
     return;
   }
-  else{
 
-    if(strcmp(buf_userName, USERNAME_CHAT)==0){
-      fprintf(stdout, "1\n");
+  //caso di rimozione di un utente dalla lista
+  else{
+    //caso in cui l'utente da rimuovere e' lo stesso con cui stavo chattando
+    if(strcmp(buf_userName, USERNAME_CHAT)==0){\
+      //esco dallo stato IS_CHATTING
       IS_CHATTING = 0;
     }
 
+    //caso in cui l'utente da rimuovere e' quello a cui ho inviato una richiesta di connessione
     else if(strcmp(buf_userName, USERNAME_REQUEST)==0){
-      fprintf(stdout, "2\n");
-      //ublocking &wait_response
+      //sblocco semaforo &wait_response per il main
       ret = sem_post(&wait_response);
       ERROR_HELPER(ret, "[READ_UPDATES] Error in sem_post on &wait_response semaphore");
     }
 
-  //  fprintf(stdout, "USERNAME_RESPONSE: %s\n", buf_userName);
-  //  fprintf(stdout, "USERNAME_RESPONSE: %s\n", USERNAME_RESPONSE);
-
+    //caso in cui l'utente da rimuovere e' quello che mi ha richiesto la connessione
     else if(strcmp(buf_userName, USERNAME_RESPONSE)==0){
-      fprintf(stdout, "USERNAME_RESPONSE: %s\n", buf_userName);
       buf_commands[0] = 0;
       memset(USERNAME_RESPONSE, 0, USERNAME_BUF_SIZE);
     }
 
-    ret = REMOVE(user_list, (gpointer)buf_userName);
-    if(!ret){
-      fprintf(stdout, "[UPDATE_LIST] Error in remove function\n");
-    }
+    //rimozione e relativa liberazione della memoria dell'elemento della user list
+    REMOVE(user_list, (gpointer)buf_userName);
 
-    fprintf(stdout, "[UPDATE_LIST] removed entry [%s] in user list\n", buf_userName);
-
+    //esco dalla zona critica
     ret = sem_post(&sync_userList);
     ERROR_HELPER(ret, "[UPDATE_LIST] Error in post function on sync_userList semaphore\n");
 
@@ -409,14 +451,28 @@ void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command){
 
 void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName, char* mod_command){
 
-  fprintf(stdout, "[PARSE_ELEM_LIST] inside parse_element function\n");
+  //************PARSING DEL MESSAGGIO DI AGGIORNAMENTO USER LIST****************
+  /*
+    Questa funzione estrae quattro campi dai messaggi realativi all'aggiornamento
+    della user_list i quali sono tutti nel seguente formato:
+
+      "COMANDO DI MODIFICA-USERNAME-IP ADDRESS-FLAG DI AVAILABILITY-"
+
+    dove:
+      COMANDO DI MODIFICA e' un char
+      USERNAME e' una stringa di lunghezza massima USERNAME_LENGTH
+      IP ADDRESS e' una stringa di lunghezza massima INET_ADDRSTRLEN
+      FLAG AVAILABILITY e' un char
+    tutti separati da un trattino alto '-'.
+  */
+  //****************************************************************************
 
   int i, j;
 
   mod_command[0] = buf[0];
 
   for(j=2; j<42; j++){
-    if(buf[j]=='-'){ //if end of string break
+    if(buf[j]=='-'){
       j++;
       break;
     }
@@ -431,12 +487,10 @@ void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName,
     return;
   }
 
-  fprintf(stdout, "[PARSE_ELEM_LIST] passed first strncpy()\n");
-
   i = j;
 
   for(; j<42; j++){
-    if(buf[j]=='-'){ //if end of string break
+    if(buf[j]=='-'){
       j++;
       break;
     }
@@ -445,10 +499,6 @@ void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName,
   strncpy(elem->client_ip, buf+i, j-i-1);
   elem->client_ip[j-i-1] = '\0';
 
-  fprintf(stdout, "[PARSE_ELEM_LIST] passed second strncpy()\n");
-
-  //checking availability char
-
   if(buf[j] == AVAILABLE){
     elem->a_flag = AVAILABLE;
   }
@@ -456,151 +506,152 @@ void parse_elem_list(const char* buf, usr_list_elem_t* elem, char* buf_userName,
     elem->a_flag = UNAVAILABLE;
   }
 
-
-  //elem->a_flag = buf[j];
-
-  //checking if parsing done right
-  fprintf(stdout, "[PARSE_ELEM_LIST] [CHECK USERNAME]     %s\n", buf_userName);
-  fprintf(stdout, "[PARSE_ELEM_LIST] [CHECK IP]           %s\n", elem->client_ip);
-  fprintf(stdout, "[PARSE_ELEM_LIST] [CHECK AVAILABILITY] %c\n", elem->a_flag);
-  fprintf(stdout, "[PARSE_ELEM_LIST] [CHECK COMMAND]      %s\n", mod_command);
-
   return;
-
 }
 
 void* read_updates(void* args){
 
   int ret;
 
-  fprintf(stdout, "[READ_UPDATES] inside function read_updates\n");
-
+  //REF sulla mail box passata in argomento dal thread_usrl_recv
   read_updates_args_t* arg = (read_updates_args_t*)args;
-
   GAsyncQueue* buf = REF(arg->read_updates_mailbox);
-  //int socket_to_server = (int)(arg->server_socket); controllare se serve
 
   while(1){
 
+    //------------------ESTRAZIONE MESSAGGI DALLA MAIL BOX------------------------
+    //
+    //buffer di appoggio per il messaggio estratto dalla mail box
     char* elem_buf;
-    //fprintf(stdout, "[READ_UPDATES] inside while(1)\n");
 
     while(1){
 
       if(GLOBAL_EXIT){
         break;
       }
-
+      //tentativo di estrazione di un messaggio dalla mail box con timer
       elem_buf = (char*)POP(buf, POP_TIMEOUT);
-
+      //se l'elemento esiste allora esco dal ciclo di estrazione
       if(elem_buf != NULL){
         break;
       }
     }
+    //
+    //--------------------------------------------------------------------------
 
+    //controllo variabile di stato GLOBAL_EXIT
     if(GLOBAL_EXIT){
       break;
     }
 
-    //fprintf(stdout, "[READ_UPDATES] Elem buff[0]: %c\n", elem_buf[0]);
-
-    //fprintf(stdout, "[READ_UPDATES] Connection request");
-
+    //----------------ELABORAZIONE COMANDI E MESSAGGI CHAT----------------------
+    //
+    //controllo se messaggio e' di chat
     if(elem_buf[0]==MESSAGE){
-
+      //controllo se il messagio di exit
       if(!strcmp(elem_buf+1,"exit")){
+        //esco dallo stato di IS_CHATTING
         IS_CHATTING = 0;
         fprintf(stdout, ">> exit message received from [%s] press ENTER to exit chat\n", USERNAME_CHAT);
+        //pulisco USERNAME_CHAT per future connessioni
         memset(USERNAME_CHAT, 0, USERNAME_BUF_SIZE);
         continue;
       }
-
+      //stampa del messaggio chat a schermo
       fprintf(stdout, "\n[%s]>> %s\n", USERNAME_CHAT, elem_buf+1);
+      //libero memoria dalla mail box
       free(elem_buf);
       continue;
     }
 
-
+    //richiesta di connessione da parte di un client
     else if(elem_buf[0] == CONNECTION_REQUEST){
-
+      //entro nello stato IS_RESPONDING
+      IS_RESPONDING = 1;
+      //copio dentro USERNAME_RESPONSE il nome del client che mi ha richiesto la connessione
       strncpy(USERNAME_RESPONSE, elem_buf+1, strlen(elem_buf)-1);
-
-      fprintf(stdout, "[READ_UPDATES] Connection request from [%s] accept [y] refuse [n]: \n", elem_buf+1);
-
+      fprintf(stdout, "\nConnection request from [%s] accept [y] refuse [n]: \n", elem_buf+1);
+      //setto il primo byte di buf_commands a CONNECTION_RESPONSE
       buf_commands[0] = CONNECTION_RESPONSE;
-
+      //libero memoria dalla mail box
       free(elem_buf);
-
       continue;
 
     }
 
+    //risposta del server relativa ad una connection request effettuata da me
     else if(elem_buf[0] == CONNECTION_RESPONSE){
 
       if(elem_buf[1] == 'y'){
 
         strncpy(USERNAME_CHAT, elem_buf+2, strlen(elem_buf)-2);
-
-        fprintf(stdout, "[READ_UPDATES] Response from server is YES! You are now chatting with: %s\n", USERNAME_CHAT);
-
+        fprintf(stdout, "You are now chatting with: %s\n", USERNAME_CHAT);
+        //entro nello stato IS_CHATTING
         IS_CHATTING = 1;
+        //setto primo byte di buf_commands a MESSAGE
         buf_commands[0] = MESSAGE;
 
       }
-
       else{
-        fprintf(stdout, "[READ_UPDATES] Response from server is NO! :(\n");
-        IS_CHATTING = 0;
+        fprintf(stdout, "Connection declined\n");
+        IS_CHATTING = 0; //ridondanza
       }
 
-      //ublocking &wait_response
+      //sblocco &wait_response per il processo main
       ret = sem_post(&wait_response);
       ERROR_HELPER(ret, "[READ_UPDATES] Error in sem_post on &wait_response semaphore");
-
+      //libero memoria dalla mail box
       free(elem_buf);
       continue;
 
     }
+    //
+    //--------------------------------------------------------------------------
 
 
-    //tutto questo va fatto solo se NON e' un messaggio un connection response o request
-
-    fprintf(stdout, "[READ_UPDATES] poped element from queue\n");
-
-    fprintf(stdout, "[READ_UPDATES] %s\n", elem_buf);
-
-    //creating struct usr_list_elem_t* for create_elem_list function
+    //-------------ELABORAZIONE DI AGGIORNAMENTI DELLA USER LIST----------------
+    //
+    //allocazione memoria per gli elementi da passare alla funzione parse_elem_list
     usr_list_elem_t* elem = (usr_list_elem_t*)calloc(1, sizeof(usr_list_elem_t));
-    elem->client_ip = (char*)calloc(INET_ADDRSTRLEN,sizeof(char));
+    elem->client_ip       = (char*)calloc(INET_ADDRSTRLEN,sizeof(char));
+    char* userName        = (char*)calloc(USERNAME_BUF_SIZE,sizeof(char));
+    char* command         = (char*)calloc(2, sizeof(char));
 
-    //creating buffer for username and command to pass to create_elem_list function
-    char* userName = (char*)calloc(USERNAME_BUF_SIZE,sizeof(char));
-    char* command = (char*)calloc(2, sizeof(char)); //ricordare che hai cambiato prima era una calloc
-
-    fprintf(stdout, "[READ_UPDATES] passing element to parse function\n");
-
-    //passing string with usr elements to be parsed by create_elem_list
+    //parsing del messaggio elem_buf ricevuto dal server
+    //vengono estratti indirizzo IP, nome e comando da eseguire per l'aggiornamento della user list
     parse_elem_list(elem_buf, elem, userName, command);
 
+    //libero memoria dalla mail box
     free(elem_buf);
 
-    fprintf(stderr, "[READ_UPDATES] parsed string to create user element in user list\n");
-
-    //updating elem list
+    //passo lo username del client da modificare e il relativo comando di modifica
+    //alla funzione di aggiornamento della user list update_list()
     update_list(userName, elem, command);
 
-    fprintf(stderr, "[READ_UPDATES] updated user list\n");
+    if(command[0] == MODIFY || command[0] == DELETE){
+      free(elem->client_ip);
+      free(userName);
+      free(elem);
+    }
 
+    //libero memoria non piu utilizzata
     free(command);
+    //
+    //--------------------------------------------------------------------------
 
   }
 
+  //-------------------------TERMINAZIONE THREAD--------------------------------
+  //
+  //UNREF della mail box passata in argomento dal thread_usrl_recv
   UNREF(arg->read_updates_mailbox);
   UNREF(buf);
 
   fprintf(stdout, "[READ_UPDATES] exiting\n");
 
   pthread_exit(NULL);
+  //
+  //----------------------------------------------------------------------------
 
 }
 
@@ -608,134 +659,156 @@ void* recv_updates(void* args){
 
   int ret, NO_CONNECTION;
 
-  NO_CONNECTION = 1;
+  NO_CONNECTION = 1; //variabile di stato per il thread, 0 se connesso al server 1 altrimenti
 
+  //inizializzo struttura timeval per la recv()
   struct timeval timeout;
-  timeout.tv_sec  = 2;
-  timeout.tv_usec = 0;
+  timeout.tv_sec  = 2; //2 secondi
+  timeout.tv_usec = 0; //0 nano secondi
 
-  //socket descriptor for user list receiver thread
+
+  //--------------PREPARAZIONE A RICEVERE CONNESSIONE DAL SERVER----------------
+  //
+  //descrittore socket per ricevere la connessione del server
   int usrl_recv_socket = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(usrl_recv_socket, "[RECV_UPDATES] Error while creating user list receiver thread socket descriptor");
 
-  //creating buffers to store modifications sent by server
+  //inizializzazione mail box per immagazzinare i messaggi del server
   GAsyncQueue* mail_box = mailbox_queue_init();
+  GAsyncQueue* buf_modifications = REF(mail_box); //aggiungo una reference alla mail box
 
-  GAsyncQueue* buf_modifications = REF(mail_box);
-  ((read_updates_args_t*) args)->read_updates_mailbox = mail_box;
-
-  //creating thread to manage updates to user list
+  //creazione thread manage_updates per l'elaborazione dei messaggi della mail box
   pthread_t manage_updates;
+  ((read_updates_args_t*) args)->read_updates_mailbox = mail_box;
   ret = pthread_create(&manage_updates, NULL, read_updates, (void*)args);
   PTHREAD_ERROR_HELPER(ret, "[RECV_UPDATES] Unable to create manage_updates thread");
 
-  //address structure for user list sender thread
+  //--INIZIALIZZAZIONE STRUTTURA DATI PER ACCETTAZIONE CONNESSIONE DEL SERVER---
   struct sockaddr_in *usrl_sender_address = (struct sockaddr_in*)calloc(1, sizeof(struct sockaddr_in));
   socklen_t usrl_sender_address_len = sizeof(usrl_sender_address);
 
-  //struct for thead user list receiver thread bind function
   struct sockaddr_in thread_addr = {0};
   thread_addr.sin_family      = AF_INET;
-  thread_addr.sin_port        = htons(CLIENT_THREAD_RECEIVER_PORT); // don't forget about network byte order!
+  thread_addr.sin_port        = htons(CLIENT_THREAD_RECEIVER_PORT);
   thread_addr.sin_addr.s_addr = INADDR_ANY;
+  //----------------------------------------------------------------------------
 
-  fprintf(stderr, "[RECV_UPDATES] created sockaddr_in struct for bind function\n");
-
-  //we enable SO_REUSEADDR to quickly restart our server after a crash
+  //abilitiamo reuseaddr_opt cosi da riutilizzare lo stesso indirizzo sulla
+  //stessa socket in seguito alcrash del programma
   int reuseaddr_opt = 1;
   ret = setsockopt(usrl_recv_socket, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_opt, sizeof(reuseaddr_opt));
   ERROR_HELPER(ret, "[RECV_UPDATES] Cannot set SO_REUSEADDR option");
 
-  //binding user list receiver thread address to user list receiver thread socket
+  //bind dello user list receiver thread address a quello user list receiver thread socket
   ret = bind(usrl_recv_socket, (const struct sockaddr*)&thread_addr, sizeof(struct sockaddr_in));
   ERROR_HELPER(ret, "[RECV_UPDATES] Error while binding address to user list receiver thread socket");
 
-  fprintf(stderr, "[RECV_UPDATES] address binded to socket\n");
-
-  //user list receiver thread listening for incoming connections
+  //in attesa di connesione da parte del server
   ret = listen(usrl_recv_socket, 1);
   ERROR_HELPER(ret, "[RECV_UPDATES] Cannot listen on user list receiver thread socket");
+  //
+  //----------------------------------------------------------------------------
 
-  fprintf(stderr, "[RECV_UPDATES] listening on socket for server connection\n");
 
-  //ublocking &sync_receiver for main process
+  //sblocco &sync_receiver notificando al processo main che sono pronto per ricevere
+  //la connessione del server
   ret = sem_post(&sync_receiver);
   ERROR_HELPER(ret, "[RECV_UPDATES] Error in sem_post on &sync_receiver semaphore (user list receiver thread routine)");
 
-  //we enable SO_RCVTIMEO so that recv function will not be blocking
+  //abilito SO_RCVTIMEO rendendo le operazioni su usrl_recv_socket non bloccanti
+  //SO_RCVTIMEO verra' ereditato anche da rec_socket
   ret = setsockopt(usrl_recv_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout));
   ERROR_HELPER(ret, "[RECV_UPDATES] Cannot set SO_RCVTIMEO option on usrl_recv_socket");
 
-  int rec_socket;
-  int tim = 0;
+  int rec_socket; //socket connessa al server
+  int tim = 0;    //contatore
 
+
+  //---------------ACCETTAZIONE CONNESSIONE DA PARTE DEL SERVER-----------------
+  //
   while(!GLOBAL_EXIT){
 
-    //accepting connection from server on user list receiver thread socket
+    //accettazione connessione da parte del server
     rec_socket = accept(usrl_recv_socket, (struct sockaddr*) usrl_sender_address, &usrl_sender_address_len);
+    //gestione errori accept()
     if(rec_socket==-1 && (errno == EAGAIN || errno == EWOULDBLOCK )){
       tim++;
-      if(tim >= MAX_WAIT_SERVER){
+      if(tim >= MAX_WAIT_SERVER){ // se tim >=MAX_WAIT_SERVER si chiude il client
         GLOBAL_EXIT=1;
         fprintf(stdout, "\n<<<<MAX_WAIT_SERVER timer expired>>>>\n");
       }
+      //SO_RCVTIMEO scaduto, ritento l'accettazione della connessione
       continue;
     }
     ERROR_HELPER(ret, "[RECV_UPDATES] Cannot accept connection on user list receiver thread socket");
+
+    //connessione con server avvenuta con successo
     NO_CONNECTION = 0;
-    fprintf(stderr, "[RECV_UPDATES] accepted connection from server\n");
     break;
   }
+  //
+  //----------------------------------------------------------------------------
 
-  //buffer for recv_msg function
+
+  //allocazione buffer per la ricezione di messaggi dal server
   char* buf = (char*)calloc(MSG_LEN, sizeof(char));
 
-  //receiving user list element from server
+
+  //-------------------RICEZIONE MESSAGGI DAL SERVER----------------------------
+  //
   while(1){
 
+      //controllo GLOBAL_EXIT
       if(GLOBAL_EXIT){
         break;
       }
 
+      //pulizia del buffer di ricezione messaggi
       memset(buf, 0, MSG_LEN);
-
-      //receiveing user list element from server
+      //ricevo messaggi dal server su socket non bloccante
       ret = recv_msg(rec_socket, buf, MSG_LEN);
 
+      //controllo se scaduto SO_RCVTIMEO
       if(ret==-2){
-        continue;
+        continue; //ritento a ricevere
       }
 
-      //server morto
+      //server morto segnalo chiusura del programma
       else if(ret==-1){
         GLOBAL_EXIT = 1;
         break;
       }
 
       if(!GLOBAL_EXIT){
-
         size_t len = strlen(buf);
+        //allocazione buffer da inserire nella mail box
         char* queueBuf_elem = (char*)calloc(len+1, sizeof(char));
-
-        strncpy(queueBuf_elem, buf, strlen(buf)); //for \0 in the char*
-
+        //copio messaggio del server nel buffer da inserire nella mail box
+        strncpy(queueBuf_elem, buf, strlen(buf));
+        //inserisco messaggio in testa alla mail box
         PUSH(buf_modifications, (gpointer)queueBuf_elem);
       }
 
-  } //end of while(1)
+  }
+  //
+  //----------------------------------------------------------------------------
 
-  //this part of code will only be executed if server or main quits
 
-  fprintf(stdout, "[RECV_UPDATES] joining read_updates\n");
-
+  //------------------OPERAZIONI DI CHIUSURA DEL THREAD-------------------------
+  //
+  //aspetto che il thread di elaborazioni dei messaggi termini
   ret = pthread_join(manage_updates, NULL);
 
+  //libero memoria allocata
   free(buf);
   free(usrl_sender_address);
+
+  //unreference della mail box
   UNREF(buf_modifications);
 
   fprintf(stderr, "[RECV_UPDATES] closing rec_socket and arg->socket...\n");
 
+  //chiusura socket e controllo se rec_socket era connessa altrimenti fallisce la close()
   if(!NO_CONNECTION){
     ret = close(rec_socket);
     ERROR_HELPER(ret, "[RECV_UPDATES] Cannot close socket");
@@ -747,162 +820,193 @@ void* recv_updates(void* args){
 
   fprintf(stderr, "[RECV_UPDATES] exiting recv_updates\n");
 
-  fprintf(stderr, "[RECV_UPDATES] Press any key to exit\n"); //potrei mettere una variabile globale per il connect_to e far stampare solo se = 1
+  fprintf(stderr, "[RECV_UPDATES] Press any key to exit\n");
 
+  //controllo stato del client, se WAITING_RESPONSE = 1 sblocco il semaforo al main
   if(WAITING_RESPONSE){
-
-    //ublocking &wait_response
+    //sblocco &wait_response per il processo main
     ret = sem_post(&wait_response);
     ERROR_HELPER(ret, "[RECV_UPDATES] Error in sem_post on &wait_response semaphore");
   }
+  //
+  //----------------------------------------------------------------------------
 
   pthread_exit(NULL);
 
-} //end of thread routine
+}
 
 int main(int argc, char* argv[]){
 
   int ret;
 
-  fprintf(stdout, "[MAIN] starting main process\n");
+  system("clear");
 
-  //arming signals
+  fprintf(stdout, "\n\nWelcome to Talk Service 2017\n\n");
+
+  //-------------PREPARAZIONE CLIENT PER CONNESSIONE AL SERVER------------------
+  //
+  //inizializzazione dei segnali
   _initSignals();
 
+  //inizializzazione delle variabili di stato e dei buffer globali
   IS_CHATTING       = 0; // non sono connesso a nessuno per adesso
-  GLOBAL_EXIT       = 0;
+  GLOBAL_EXIT       = 0; // non devo terminare
   WAITING_RESPONSE  = 0; // non aspetto nessuna risposta da server
+  IS_RESPONDING     = 0; // non ho richieste a cui devo rispondere
   USERNAME          = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
   USERNAME_CHAT     = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
   USERNAME_REQUEST  = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
   USERNAME_RESPONSE = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
 
-  //initializing semaphores
+  //allocazione memoria per il buffer di controllo di input dello username da parte dello user
+  char* check_username = (char*)calloc(256, sizeof(char));
+
+  //inizializzazione dei semafori sync_receiver, sync_userList e wait_response;
   _initSemaphores();
 
-
-  //initializing GLibHashTable for user list
+  //inizializzazione della GLibHashTable per la lista utenti
   user_list = usr_list_init();
 
-  //buffer for disconnect
+  //allocazione memoria per il buffer di disconnect
   char* disconnect  = (char*)calloc(3, sizeof(char));
   strcpy(disconnect,  "c\n");
 
-  //socket descriptor to connect to server
+  //descrittore socket per la connessione al server
   int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
   ERROR_HELPER(socket_desc, "[MAIN] Error while creating client socket descriptor");
 
-  //data structure for the connection to the server
+  //creazione della struttura dati sockaddr_in per la connessione al server
   struct sockaddr_in serv_addr = {0};
   serv_addr.sin_family         = AF_INET;
   serv_addr.sin_port           = htons(SERVER_PORT);
   inet_pton(AF_INET, SERVER_IP, &(serv_addr.sin_addr.s_addr));
 
-  fprintf(stdout, "[MAIN] created data structure for connection with server\n");
-
-  //creating and spawning user list receiver thread with parameters
-  read_updates_args_t* thread_usrl_recv_args = (read_updates_args_t*)malloc(sizeof(read_updates_args_t));
-
+  //----CREAZIONE thread_usrl_recv THREAD PER RICEZIONE MESSAGGI DAL SERVER-----
   pthread_t thread_usrl_recv;
+  read_updates_args_t* thread_usrl_recv_args = (read_updates_args_t*)malloc(sizeof(read_updates_args_t));
   ret = pthread_create(&thread_usrl_recv, NULL, recv_updates, (void*)thread_usrl_recv_args);
   PTHREAD_ERROR_HELPER(ret, "[MAIN] Unable to create user list receiver thread");
 
-  fprintf(stdout, "[MAIN] waiting for usrl_listen_thread_routine to bind address\n");
-
-  //waiting for usrl_liste_thread_routine to bind address to socket and to listen
+  //in attesa che il thread_usrl_recv si metta in ascolto sulla socket
   ret = sem_wait(&sync_receiver);
   ERROR_HELPER(ret, "[MAIN] Error in sem_wait (main process)");
 
-  fprintf(stdout, "[MAIN] destroying sync_receiver semaphore\n");
-
-  //closing &sync_receiver
+  //distruggo il semaforo sync_receiver
   ret = sem_destroy(&sync_receiver);
   ERROR_HELPER(ret, "[MAIN] Error destroying &sync_receiver semaphore");
+  //
+  //----------------------------------------------------------------------------
 
-  //connection to server
+
+  //----------------------CONNESSIONE AL SERVER---------------------------------
+  //
   ret = connect(socket_desc, (struct sockaddr*) &serv_addr, sizeof(struct sockaddr_in));
   if(ret == -1 && (errno == ENETUNREACH || errno == ECONNREFUSED)){
     fprintf(stdout, "[MAIN] Connection refused from host or no connection available\n");
-    GLOBAL_EXIT = 1;
+    GLOBAL_EXIT = 1; //nessuna connesione verso il server, chiudo il programma
   }
   else{
     ERROR_HELPER(ret, "[MAIN] Error trying to connect to server");
   }
+  //
+  //----------------------------------------------------------------------------
 
-  if(!GLOBAL_EXIT) fprintf(stdout, "[MAIN] connected to server\n");
-
-  //getting username from user
+  //-----------------------INVIO USERNAME AL SERVER-----------------------------
+  //
   while(!GLOBAL_EXIT){
-    ret = get_username(USERNAME, socket_desc);
-    if(ret==1){
+    ret = get_username(check_username, socket_desc);
+    if(ret==1){ //username ok o problema in send o recv e GLOBAL_EXIT = 12
       break;
     }
-    memset(USERNAME, 0, USERNAME_BUF_SIZE); //setting buffer to 0
+    memset(check_username, 0, 256); //pulisco il buffer di controllo input
+  }
+  //
+  //----------------------------------------------------------------------------
+
+  //se GLOBAL_EXIT = 1 non effettuo la strncpy
+  if(!GLOBAL_EXIT){
+    strncpy(USERNAME, check_username, strlen(check_username));
   }
 
-  fprintf(stdout, "[MAIN] got username: [%s]\n", USERNAME);
+  //libero memoria non piu' utilizzata
+  free(check_username);
 
-  buf_commands = (char*)calloc(MSG_LEN, sizeof(char));
-  char* user_buf = (char*)calloc(MSG_LEN, sizeof(char));
+  //inizializzazione memoria per buffer di input dallo user
+  buf_commands   = (char*)calloc(MSG_LEN, sizeof(char));
+  char* user_buf = (char*)calloc(MSG_LEN, sizeof(char)); //buffer per usernome per richiesta connessione
 
-  //display commands for first time
+  //stampa a schermo dei comandi disponibili per l'utente
   if(!GLOBAL_EXIT) display_commands();
 
+  //--------------CICLO DI VALIDAZIONE DEGLI INPUT DELLO USER-------------------
+  //
   while(1){
 
     if(GLOBAL_EXIT){
-      fprintf(stdout, "[MAIN] Ready to exit process...\n");
+      fprintf(stdout, "Ready to exit process...\n");
       break;
     }
 
     else if(IS_CHATTING){
       fprintf(stdout, "[%s]>>: ", USERNAME);
     }
+
+    else if(IS_RESPONDING){
+      fprintf(stdout, "Input y/n: ");
+    }
+
     else{
-      fprintf(stdout, "[MAIN] IMPUT COMMAND (help to display commands): ");
+      fprintf(stdout, "IMPUT COMMAND (help to display commands): ");
     }
 
     fgets(buf_commands+1, MSG_LEN-3, stdin);
 
-    if(IS_CHATTING){ //per inviare messaggi in chat //messaggio contenuto in buf_commands
+    //se IS_CHATTING = 1 il client e' nello stato di chat e buf_commands viene gestito come messaggio di chat
+    if(IS_CHATTING){
       send_message(socket_desc);
       continue;
     }
 
+    //stato del client IS_RESPONDING = 1
     else if(buf_commands[0] == CONNECTION_RESPONSE){
       reply(socket_desc);
-      my_flush();
       continue;
     }
 
+    //stampa a schermo la lista utenti
     else if(strcmp(buf_commands+1, LIST)==0 && !GLOBAL_EXIT){  //per la lista
       list_command();
       memset(buf_commands, 0, MSG_LEN);
       continue;
     }
 
+    //richiesta di conessione ad un client
     else if(strcmp(buf_commands+1, CONNECT)==0 && !GLOBAL_EXIT){ //per connettersi al client
       connect_to(socket_desc, user_buf);
       continue;
     }
 
+    //stampa a schermo la lista dei comandi disponibili all'utente
     else if(strcmp(buf_commands+1, HELP)==0 && !GLOBAL_EXIT){
-      display_commands(); //imbarazzante una funzione per stampare una stringa cazzo
+      display_commands();
       memset(buf_commands,  0, MSG_LEN);
       continue;
     }
 
-    else if(strcmp(buf_commands+1, EXIT)==0 && !GLOBAL_EXIT){ //per uscire dal programma
+    //setta GLOBAL_EXIT = 1 indicando la chiusura del programma
+    else if(strcmp(buf_commands+1, EXIT)==0 && !GLOBAL_EXIT){
       GLOBAL_EXIT = 1;
       break;
     }
 
+    //pulisce schermo
     else if(strcmp(buf_commands+1, CLEAR)==0 && !GLOBAL_EXIT){
       memset(buf_commands,  0, MSG_LEN);
       system("clear");
       continue;
     }
 
+    //input dell'utente non corretto
     else{
       if(GLOBAL_EXIT){
         break;
@@ -910,27 +1014,34 @@ int main(int argc, char* argv[]){
       fprintf(stdout, "\n>>command not found\n");
       display_commands();
       memset(buf_commands,  0, MSG_LEN);
-      //scarico stdin
-      my_flush();
     }
 
   }
+  //
+  //----------------------------------------------------------------------------
 
-  //sending disconnect command to server
-  ret = send_msg(socket_desc, disconnect);
+  //--------------------------CHIUSURA PROGRAMMA--------------------------------
+  //
+  //invio messaggio di disconnessione al server, se la send() fallisce il programma non termina
+  //ma continua con le funzioni di pulizia di memoria
+  send_msg(socket_desc, disconnect);
 
+  //in attesa che il thread_usrl_recv termini
   ret = pthread_join(thread_usrl_recv, NULL);
 
   fprintf(stdout, "[MAIN] destroying semaphores....\n");
 
+  //-----------------------DISTRUZIONE SEMAFORI---------------------------------
   ret = sem_destroy(&sync_userList);
   ERROR_HELPER(ret, "[MAIN] Error destroying &sync_userList semaphore");
 
   ret = sem_destroy(&wait_response);
   ERROR_HELPER(ret, "[MAIN] Error destroying &wait_response semaphore");
+  //----------------------------------------------------------------------------
 
   fprintf(stdout, "[MAIN] freeing allocated data...\n");
 
+  //----------------------LIBERO MEMORIA ALLOCATA-------------------------------
   free(USERNAME);
   free(USERNAME_CHAT);
   free(USERNAME_REQUEST);
@@ -939,13 +1050,15 @@ int main(int argc, char* argv[]){
   free(user_buf);
   free(thread_usrl_recv_args);
   free(disconnect);
+  //----------------------------------------------------------------------------
 
   fprintf(stdout, "[MAIN] Destroying user list...\n");
+  //distruzione della GLibHashTable e relativa liberazione della memoria dei campi
   DESTROY(user_list);
 
   fprintf(stdout, "[MAIN] closing socket descriptors...\n");
 
-  // close client main process socket
+  //chiusura della socket di connessione al server
   ret = close(socket_desc);
   ERROR_HELPER(ret, "[MAIN] Cannot close socket_desc");
 

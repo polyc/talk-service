@@ -15,7 +15,7 @@
 int send_msg(int socket, char *buf) {
     int ret;
 
-    int bytes_left = strlen(buf); //bruscolini al posto di pere ahahaha
+    int bytes_left = strlen(buf);
     int bytes_sent = 0;
 
     while (bytes_left > 0) {
@@ -23,7 +23,7 @@ int send_msg(int socket, char *buf) {
 
         if (ret == -1 && errno == EINTR) continue;
         else if(ret == -1 && errno == EPIPE) return -1; //sigpipe
-        else if(ret == -1 && (errno == ENETDOWN || errno == ENETUNREACH)) return -2;
+        else if(ret == -1 && (errno == ENETDOWN || errno == ENETUNREACH || errno == ECONNRESET)) return -2;
         ERROR_HELPER(ret, "Errore nella scrittura su socket");
 
         bytes_left -= ret;
@@ -36,7 +36,7 @@ int recv_msg(int socket, char *buf, size_t buf_len, int timer) {
     int ret;
     int bytes_read = 0;
 
-    // messages longer that buf_len wont be read all
+    // messages longer than buf_len wont be read all
     while (bytes_read <= buf_len) {
         ret = recv(socket, buf + bytes_read, 1, 0);
 
