@@ -766,7 +766,6 @@ void* recv_updates(void* args){
       memset(buf, 0, MSG_LEN);
       //ricevo messaggi dal server su socket non bloccante
       ret = recv_msg(rec_socket, buf, MSG_LEN);
-      fprintf(stdout, "BUF: %s\n", buf);
 
       //controllo se scaduto SO_RCVTIMEO
       if(ret==-2){
