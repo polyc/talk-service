@@ -84,20 +84,20 @@ Succesivamente, si deve inserire l'indirizzo IPv4, associato alla macchina su cu
    * <code>make</code> compila sia il server che il client in maniera efficiente, cioè se vi è bisogno di aggiornare ciascun eseguibile.
 
    oppure:
-   * <code>make sever</code> compila solo il server.
+   * <code>make server</code> compila solo il server.
    * <code>make client</code> compila solo il client.
    * <code>make clean</code> elimina gli eseguibili generati da compilazioni precedenti.
-   
+
 
 ## esecuzione
 
-   Per eseguire il sever:
+   Per eseguire il server:
     <code>./server</code>
 
    Per arrestarlo:
    CTRL-C
 
-   
+
    Per eseguire il client:
    <code>./client</code>
 
