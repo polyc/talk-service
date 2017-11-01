@@ -216,7 +216,7 @@ void connect_to(int socket, char* target_client){
   }
 
   //pulisco i buffer buf_commands e target_client per prossimi input
-  memset(buf_commands,  0, MSG_LEN);
+  memset(buf_commands+1,  0, MSG_LEN-1);
   memset(target_client, 0, MSG_LEN);
 
   //aspetto una risposta dal server riguardo la mia richiesta di connessione
@@ -249,7 +249,7 @@ void reply(int socket){
     //ho rifiutato la connessione
     else{
       IS_RESPONDING = 0; //esco dallo stato IS_RESPONDING
-      IS_CHATTING = 0;   //mi accerto che lo stato non sia IS_CHATTING
+      IS_CHATTING   = 0;   //mi accerto che lo stato non sia IS_CHATTING
     }
 
     //copio USERNAME_RESPONSE per rispondere alla sua richiesta di connessione
@@ -263,7 +263,6 @@ void reply(int socket){
     ret = send_msg(socket, buf_commands);
     //il server e' morto, il client termina
     if(ret == -2){
-      fprintf(stdout, "GRAVEEE\n");
       GLOBAL_EXIT = 1;
       return;
     }
@@ -290,7 +289,7 @@ int get_username(char* username, int socket){
 
   //fgets su buffer di 256 per controllare input dell'utente
   username = fgets(username, 256, stdin);
-  length = strlen(username);
+  length   = strlen(username);
 
   if(GLOBAL_EXIT){
     return 1;
@@ -416,6 +415,7 @@ void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command){
 
     return;
   }
+
   //caso di rimozione di un utente dalla lista
   else{
     //caso in cui l'utente da rimuovere e' lo stesso con cui stavo chattando
@@ -438,10 +438,7 @@ void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command){
     }
 
     //rimozione e relativa liberazione della memoria dell'elemento della user list
-    ret = REMOVE(user_list, (gpointer)buf_userName);
-    if(!ret){
-      fprintf(stdout, "[UPDATE_LIST] Error in remove function\n");
-    }
+    REMOVE(user_list, (gpointer)buf_userName);
 
     //esco dalla zona critica
     ret = sem_post(&sync_userList);
@@ -597,7 +594,7 @@ void* read_updates(void* args){
       }
       else{
         fprintf(stdout, "Connection declined\n");
-        IS_CHATTING = 0;
+        IS_CHATTING = 0; //ridondanza
       }
 
       //sblocco &wait_response per il processo main
@@ -630,6 +627,12 @@ void* read_updates(void* args){
     //passo lo username del client da modificare e il relativo comando di modifica
     //alla funzione di aggiornamento della user list update_list()
     update_list(userName, elem, command);
+
+    if(command[0] == MODIFY){
+      free(elem->client_ip);
+      free(elem);
+    }
+
     //libero memoria non piu utilizzata
     free(command);
     //
@@ -856,7 +859,7 @@ int main(int argc, char* argv[]){
   USERNAME_RESPONSE = (char*)calloc(USERNAME_BUF_SIZE, sizeof(char));
 
   //allocazione memoria per il buffer di controllo di input dello username da parte dello user
-  char* check_username    = (char*)calloc(256, sizeof(char));
+  char* check_username = (char*)calloc(256, sizeof(char));
 
   //inizializzazione dei semafori sync_receiver, sync_userList e wait_response;
   _initSemaphores();
@@ -912,7 +915,7 @@ int main(int argc, char* argv[]){
   //
   while(!GLOBAL_EXIT){
     ret = get_username(check_username, socket_desc);
-    if(ret==1){
+    if(ret==1){ //username ok o problema in send o recv e GLOBAL_EXIT = 12
       break;
     }
     memset(check_username, 0, 256); //pulisco il buffer di controllo input
@@ -929,8 +932,8 @@ int main(int argc, char* argv[]){
   free(check_username);
 
   //inizializzazione memoria per buffer di input dallo user
-  buf_commands = (char*)calloc(MSG_LEN, sizeof(char));
-  char* user_buf = (char*)calloc(MSG_LEN, sizeof(char));
+  buf_commands   = (char*)calloc(MSG_LEN, sizeof(char));
+  char* user_buf = (char*)calloc(MSG_LEN, sizeof(char)); //buffer per usernome per richiesta connessione
 
   //stampa a schermo dei comandi disponibili per l'utente
   if(!GLOBAL_EXIT) display_commands();

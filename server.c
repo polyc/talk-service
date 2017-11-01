@@ -96,7 +96,10 @@ char* parse_username(char* src, char* dest, char message_type){
     return dest;
   }
 
-  else if(message_type == CONNECTION_REQUEST){
+  //set terget buf empty
+  memset(dest, 0, USERNAME_BUF_SIZE);
+
+  if(message_type == CONNECTION_REQUEST){
     for (i = 1; i < len; i++) {
       dest[i - 1] = src[i];
     }
@@ -125,6 +128,7 @@ int connection_accepted(char* response){
 
 //receive username from client and check if it's already used by another connected client
 int get_username(thread_args_t* args, usr_list_elem_t* new_element){
+
   char* send_buf = (char*)calloc(3, sizeof(char)); //buffer used to send response to client
   int inactivity_counter = 0;
 
@@ -134,7 +138,7 @@ int get_username(thread_args_t* args, usr_list_elem_t* new_element){
 
     //EAGAIN case
     if(ret == -2){
-      if(inactivity_counter == MAX_GET_USERNAME_INACTIVITY){
+      if(inactivity_counter >= MAX_GET_USERNAME_INACTIVITY){
         fprintf(stdout, "[CONNECTION THREAD]: client inactive, killing threads\n");
         free(send_buf);
         return GENERIC_THREAD_TERM;
@@ -167,7 +171,7 @@ int get_username(thread_args_t* args, usr_list_elem_t* new_element){
       new_element->a_flag = AVAILABLE;
       //inserting user into hash-table userlist
       ret = INSERT(user_list, (gpointer)args->client_user_name, (gpointer)new_element);
-      fprintf(stdout, "[CONNECTION THREAD]: element in serted\n");
+      fprintf(stdout, "[CONNECTION THREAD]: element inserted\n");
 
       ret = sem_post(&user_list_mutex);
       ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot post on user_list_mutex");
@@ -235,19 +239,18 @@ void update_availability(usr_list_elem_t* elem_to_update, char buf_command){
 
 //remove entries from hash tables when a client disconnects from server
 void remove_entry(char* elem_to_remove, char* mailbox_to_remove){
-  gboolean removed;
 
   //removing from mailboxlist
   int ret = sem_wait(&mailbox_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: could not wait on mailbox_list_mutex semaphore");
-  removed = REMOVE(mailbox_list, mailbox_to_remove);
+  REMOVE(mailbox_list, mailbox_to_remove);
   ret = sem_post(&mailbox_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: could not post on mailbox_list_mutex semaphore");
 
   //removing from userlist
   ret = sem_wait(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: could not wait on user_list_mutex_list semaphore");
-  removed = REMOVE(user_list, elem_to_remove); //remove entry
+  REMOVE(user_list, elem_to_remove); //remove entry
   ret = sem_post(&user_list_mutex);
   ERROR_HELPER(ret, "[CONNECTION THREAD]: could not post on user_list_mutex_list semaphore");
 
@@ -257,6 +260,7 @@ void remove_entry(char* elem_to_remove, char* mailbox_to_remove){
 
 //push a message into sender thread personal GAsyncQueue
 void push_entry(gpointer key, gpointer value, gpointer user_data){
+
   push_entry_args_t* args = (push_entry_args_t*)user_data;
 
   if(strcmp((char*)key, (char*)(args->sender_username))){//doesn't push to himself
@@ -543,7 +547,7 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
 
 
     case MESSAGE:
-      
+
       //-----------------------SEARCH FOR TARGET MAILBOX----------------------
       ret = sem_wait(&mailbox_list_mutex);
       ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot wait on mailbox_list_mutex");
@@ -555,12 +559,12 @@ int execute_command(thread_args_t* args, char* message_buf, usr_list_elem_t* ele
       ERROR_HELPER(ret, "[CONNECTION THREAD]: cannot post on mailbox_list_mutex");
 
       fprintf(stdout, "[CONNECTION THREAD]: MESSAGE = %s\n", message_buf);
-      
+
       //------------------------------PUSH MESSAGE----------------------------
       size_buf = strlen(message_buf);
       message_buf[size_buf] = '\n';
       message_buf[size_buf+1] = '\0';
-      
+
       //push_entry_args preparation
       p_args = (push_entry_args_t*)malloc(sizeof(push_entry_args_t));
       p_args->message = message_buf;
@@ -802,6 +806,8 @@ void* connection_handler(void* arg){
           ret = execute_command(args, message_buf, element, target_useraname_buf);
           break; //term threads
         }
+        ret = sem_post(&user_list_mutex);
+        ERROR_HELPER(ret, "[CONNECTION THREAD]:cannot post on user_list_mutex");
       }
       else{
           inactivity_counter++;
@@ -1008,6 +1014,8 @@ int main(int argc, char const *argv[]) {
 
   //set handler for common signals
   _initSignals();
+
+  system("clear");
 
   //set timeout for sockets
   timeout.tv_sec  = 1;
