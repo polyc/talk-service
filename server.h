@@ -3,6 +3,10 @@
 #define MAX_CONN_QUEUE 5
 #define MAX_GET_USERNAME_INACTIVITY 120
 #define MAX_INACTIVITY 600
+#define GENERIC_THREAD_TERM -1
+
+//get_username() MACROS
+#define TRY_AGAIN -2
 
 //data structure passed to connection handler threads on creation
 typedef struct thread_args_s{
@@ -33,8 +37,9 @@ typedef struct send_list_args_s{
   int* threads_term; ////notify chandler a sigpipe (it's the same var in sender_thread_args_s)
 }send_list_args_t;
 
-//void create_user_list_element(usr_list_elem_t* element, char* ip, thread_args_t* args, char* buf);
 
+void _initSignals();
+void _initMainSemaphores();
 void intHandler();
 void* connection_handler(void* arg);
 void* sender_routine(void* arg);

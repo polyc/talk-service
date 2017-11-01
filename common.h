@@ -21,25 +21,24 @@
 #define DESTROY   g_hash_table_destroy
 
 //Glib AsyncQueue macros
-#define REF g_async_queue_ref
-#define UNREF g_async_queue_unref
-#define PUSH g_async_queue_push
-#define POP g_async_queue_timeout_pop
-#define LOCK g_async_queue_lock
-#define UNLOCK g_async_queue_unlock
+#define REF       g_async_queue_ref
+#define UNREF     g_async_queue_unref
+#define PUSH      g_async_queue_push
+#define POP       g_async_queue_timeout_pop
+#define LOCK      g_async_queue_lock
+#define UNLOCK    g_async_queue_unlock
 
-//server commands macros
-#define AVAILABLE              'a'
-#define UNAVAILABLE            'u'
+//type of messages macros
+#define AVAILABLE              'a' // client is available
+#define UNAVAILABLE            'u' // client is unavailable
 #define DISCONNECT             'c' //disconnecting from server
-#define NEW                    'n'
-#define MODIFY                 'm'
-#define DELETE                 'd'
-#define QUIT                   'q'
-#define MESSAGE                'x'
+#define NEW                    'n' //add a new client in user_list
+#define MODIFY                 'm' //modify a entry in user_list
+#define DELETE                 'd' //remove a entry in user_list
+#define MESSAGE                'x' //chat message
 #define CONNECTION_REQUEST     'r' //client wants to chat with someone
 #define CONNECTION_RESPONSE    's' //client's response to server, usually resended to another client
-#define EXIT                   "exit\n"
+#define EXIT                   "exit\n" //exit from chat || exit from client
 
 #define GENERIC_ERROR_HELPER(cond, errCode, msg) do {             \
         if (cond) {                                               \
@@ -55,7 +54,7 @@
 //user list typical element
 typedef struct usr_list_elem_s{
   char* client_ip;
-  char a_flag;
+  char a_flag; //availability flag
 }usr_list_elem_t;
 
 #endif
