@@ -23,9 +23,9 @@ void* recv_updates(void *args);
 void* read_updates(void* args);
 
 //functions
-int get_username(char* username, int socket);
-static void print_userList(gpointer key, gpointer elem, gpointer data);
 GHashTable* usr_list_init();
+static void print_userList(gpointer key, gpointer elem, gpointer data);
+int get_username(char* username, int socket);
 void _initSignals();
 void _initSemaphores();
 void intHandler();
@@ -37,3 +37,4 @@ void send_message(int socket);
 void connect_to(int socket, char* target_client);
 void reply(int socket);
 void display_commands();
+void reset_bufCommands();
