@@ -22,6 +22,7 @@
 
 sem_t sync_receiver;
 sem_t sync_userList;
+sem_t buf_commands_mutex;
 sem_t wait_response;
 GHashTable* user_list;
 
@@ -30,10 +31,10 @@ char* USERNAME_CHAT;     //buffer contenente lo useranem del client con cui sto 
 char* USERNAME_REQUEST;  //buffer contenente lo username del client a cui ho fatto la richiesta di connessione
 char* USERNAME_RESPONSE; //buffer contenente lo username del client che mi ha inviato una richiesta di connessione
 char* buf_commands;
-static volatile int   IS_CHATTING;      // 0 se non connesso 1 se connesso
-static volatile int   WAITING_RESPONSE; // 0 se non sta aspettando una risposta dal server 1 altrimenti
-static volatile int   IS_RESPONDING;    // 1 se sta aspettando che lo user accetti o no la connessione 0 altrimenti
-static sig_atomic_t   GLOBAL_EXIT;      // 1 se bisogna interrompere il programma 0 altrimenti
+volatile sig_atomic_t   IS_CHATTING;      // 0 se non connesso 1 se connesso
+volatile sig_atomic_t   WAITING_RESPONSE; // 0 se non sta aspettando una risposta dal server 1 altrimenti
+volatile sig_atomic_t   IS_RESPONDING;    // 1 se sta aspettando che lo user accetti o no la connessione 0 altrimenti
+volatile sig_atomic_t   GLOBAL_EXIT;      // 1 se bisogna interrompere il programma 0 altrimenti
 
 //handler di segnale per SIGHUP SIGINT SIGTERM SIGPIPE
 void sigHandler(int sig){
@@ -103,6 +104,10 @@ void _initSemaphores(){
   ret = sem_init(&sync_receiver, 0, 0);
   ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &sync_receiver semaphore");
 
+  //creating sempahore for mutual exclusion on buf_commands[0]
+  ret = sem_init(&buf_commands_mutex, 0, 1);
+  ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &buf_commands_mutex semaphore");
+
   //creating semaphore for connect_to function
   ret = sem_init(&wait_response, 0, 0);
   ERROR_HELPER(ret, "[MAIN] [FATAL ERROR] Could not init &wait_response semaphore");
@@ -140,6 +145,21 @@ static void print_userList(gpointer key, gpointer elem, gpointer data){
   return;
 }
 
+void reset_bufCommands(){
+
+  int ret;
+
+  ret = sem_wait(&buf_commands_mutex);
+  ERROR_HELPER(ret, "[MAIN] Error in sem_wait (main process)");
+
+  memset(buf_commands,  0, MSG_LEN);
+
+  ret = sem_post(&buf_commands_mutex);
+  ERROR_HELPER(ret, "[MAIN] Error in sem_post (main process)");
+
+  return;
+}
+
 void list_command(){
 
   int ret;
@@ -162,7 +182,12 @@ void send_message(int socket){
   int ret, len;
 
   //indico al server che il messaggio che gli arriva e' un messaggio di chat
+  ret = sem_wait(&buf_commands_mutex);
+  ERROR_HELPER(ret, "[MAIN] Error in sem_wait (main process)");
   buf_commands[0] = MESSAGE;
+  ret = sem_post(&buf_commands_mutex);
+  ERROR_HELPER(ret, "[MAIN] Error in sem_post (main process)");
+
   len = strlen(buf_commands);
   buf_commands[len-1] = '\n';
   buf_commands[len]   = '\0';
@@ -179,7 +204,7 @@ void send_message(int socket){
   //pulisco tutto buf_commands
   if(strncmp(buf_commands+1, EXIT, strlen(buf_commands+1))==0){
     IS_CHATTING = 0;
-    memset(buf_commands, 0, MSG_LEN);
+    reset_bufCommands();
     return;
   }
 
@@ -240,6 +265,9 @@ void reply(int socket){
   if(((buf_commands[1]=='y' || buf_commands[1]=='n') && strlen(buf_commands)==3)){
 
     //ho accettato la connessione
+    ret = sem_wait(&buf_commands_mutex);
+    ERROR_HELPER(ret, "[MAIN] Error in sem_wait (main process)");
+
     if(buf_commands[0]== CONNECTION_RESPONSE && buf_commands[1] == 'y'){
       IS_RESPONDING = 0; //esco dallo stato IS_RESPONDING
       IS_CHATTING = 1;   //entro nello stato IS_CHATTING
@@ -251,6 +279,8 @@ void reply(int socket){
       IS_RESPONDING = 0; //esco dallo stato IS_RESPONDING
       IS_CHATTING   = 0;   //mi accerto che lo stato non sia IS_CHATTING
     }
+    ret = sem_post(&buf_commands_mutex);
+    ERROR_HELPER(ret, "[MAIN] Error in sem_post (main process)");
 
     //copio USERNAME_RESPONSE per rispondere alla sua richiesta di connessione
     strncpy(buf_commands+2, USERNAME_RESPONSE, strlen(USERNAME_RESPONSE));
@@ -267,7 +297,7 @@ void reply(int socket){
       return;
     }
     //pulisco buf_commands cosi da poter prendere altri input da utente
-    memset(buf_commands, 0, MSG_LEN);
+    reset_bufCommands();
     return;
   }
   //input da utente sbagliato viene pulito buf_commands dal secondo byte in poi
@@ -433,7 +463,13 @@ void update_list(char* buf_userName, usr_list_elem_t* elem, char* mod_command){
 
     //caso in cui l'utente da rimuovere e' quello che mi ha richiesto la connessione
     else if(strcmp(buf_userName, USERNAME_RESPONSE)==0){
+
+      ret = sem_wait(&buf_commands_mutex);
+      ERROR_HELPER(ret, "[MAIN] Error in sem_wait (main process)");
       buf_commands[0] = 0;
+      ret = sem_post(&buf_commands_mutex);
+      ERROR_HELPER(ret, "[MAIN] Error in sem_post (main process)");
+
       memset(USERNAME_RESPONSE, 0, USERNAME_BUF_SIZE);
     }
 
@@ -572,7 +608,11 @@ void* read_updates(void* args){
       strncpy(USERNAME_RESPONSE, elem_buf+1, strlen(elem_buf)-1);
       fprintf(stdout, "\nConnection request from [%s] accept [y] refuse [n]: \n", elem_buf+1);
       //setto il primo byte di buf_commands a CONNECTION_RESPONSE
+      ret = sem_wait(&buf_commands_mutex);
+      ERROR_HELPER(ret, "[MAIN] Error in sem_wait (main process)");
       buf_commands[0] = CONNECTION_RESPONSE;
+      ret = sem_post(&buf_commands_mutex);
+      ERROR_HELPER(ret, "[MAIN] Error in sem_post (main process)");
       //libero memoria dalla mail box
       free(elem_buf);
       continue;
@@ -589,7 +629,11 @@ void* read_updates(void* args){
         //entro nello stato IS_CHATTING
         IS_CHATTING = 1;
         //setto primo byte di buf_commands a MESSAGE
+        ret = sem_wait(&buf_commands_mutex);
+        ERROR_HELPER(ret, "[MAIN] Error in sem_wait (main process)");
         buf_commands[0] = MESSAGE;
+        ret = sem_post(&buf_commands_mutex);
+        ERROR_HELPER(ret, "[MAIN] Error in sem_post (main process)");
 
       }
       else{
@@ -968,15 +1012,21 @@ int main(int argc, char* argv[]){
     }
 
     //stato del client IS_RESPONDING = 1
-    else if(buf_commands[0] == CONNECTION_RESPONSE){
+    ret = sem_wait(&buf_commands_mutex);
+    ERROR_HELPER(ret, "[MAIN] Error in sem_wait (main process)");
+    if(buf_commands[0] == CONNECTION_RESPONSE){
+      ret = sem_post(&buf_commands_mutex);
+      ERROR_HELPER(ret, "[MAIN] Error in sem_post (main process)");
       reply(socket_desc);
       continue;
     }
+    ret = sem_post(&buf_commands_mutex);
+    ERROR_HELPER(ret, "[MAIN] Error in sem_post (main process)");
 
     //stampa a schermo la lista utenti
-    else if(strcmp(buf_commands+1, LIST)==0 && !GLOBAL_EXIT){  //per la lista
+    if(strcmp(buf_commands+1, LIST)==0 && !GLOBAL_EXIT){  //per la lista
       list_command();
-      memset(buf_commands, 0, MSG_LEN);
+      reset_bufCommands();
       continue;
     }
 
@@ -989,7 +1039,7 @@ int main(int argc, char* argv[]){
     //stampa a schermo la lista dei comandi disponibili all'utente
     else if(strcmp(buf_commands+1, HELP)==0 && !GLOBAL_EXIT){
       display_commands();
-      memset(buf_commands,  0, MSG_LEN);
+      reset_bufCommands();
       continue;
     }
 
@@ -1001,7 +1051,7 @@ int main(int argc, char* argv[]){
 
     //pulisce schermo
     else if(strcmp(buf_commands+1, CLEAR)==0 && !GLOBAL_EXIT){
-      memset(buf_commands,  0, MSG_LEN);
+      reset_bufCommands();
       system("clear");
       continue;
     }
@@ -1013,7 +1063,7 @@ int main(int argc, char* argv[]){
       }
       fprintf(stdout, "\n>>command not found\n");
       display_commands();
-      memset(buf_commands,  0, MSG_LEN);
+      reset_bufCommands();
     }
 
   }
@@ -1037,6 +1087,9 @@ int main(int argc, char* argv[]){
 
   ret = sem_destroy(&wait_response);
   ERROR_HELPER(ret, "[MAIN] Error destroying &wait_response semaphore");
+
+  ret = sem_destroy(&buf_commands_mutex);
+  ERROR_HELPER(ret, "[MAIN] Error destroying &buf_commands_mutex semaphore");
   //----------------------------------------------------------------------------
 
   fprintf(stdout, "[MAIN] freeing allocated data...\n");
