@@ -77,14 +77,10 @@ void _initMainSemaphores(){
 }
 
 void intHandler(int sig){
-  if(sig == SIGPIPE){
-    fprintf(stdout, "CATCHED SIGPIPE\n");
-    return;
-  }
-  else{
-    fprintf(stdout, "\n\n<<<<< preparing to exit program>>>>>\n\n");
-    GLOBAL_EXIT = 1;
-  }
+
+  fprintf(stdout, "\n\n<<<<< preparing to exit program>>>>>\n\n");
+  GLOBAL_EXIT = 1;
+
 }
 
 //parse target username from a connection request/response string
@@ -1030,7 +1026,7 @@ int main(int argc, char const *argv[]) {
   //init server userlist
   user_list = usr_list_init();
 
-  //init mailbox_list
+  //mailboxs hashtable
   mailbox_list = mailbox_list_init();
 
   _initMainSemaphores();
@@ -1119,17 +1115,17 @@ int main(int argc, char const *argv[]) {
 
     //CLOSE OPERATIONS
 
+    //free clients addreses
+    struct sockaddr_in* addr;
+    while((addr = POP(addresses_queue, POP_TIMEOUT)) != NULL){
+      free(addr);
+    }
     //free threads
     pthread_t*  t;
     while((t = POP(thread_queue, POP_TIMEOUT)) != NULL){
       ret = pthread_join(*t, NULL);
     }
 
-    //free clients addreses
-    struct sockaddr_in* addr;
-    while((addr = POP(addresses_queue, POP_TIMEOUT)) != NULL){
-      free(addr);
-    }
 
     free(client_addr);
 
