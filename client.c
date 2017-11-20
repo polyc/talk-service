@@ -673,9 +673,11 @@ void* read_updates(void* args){
     update_list(userName, elem, command);
 
     if(command[0] == MODIFY || command[0] == DELETE){
-      free(elem->client_ip);
       free(userName);
       free(elem);
+    }
+    if(command[0] == MODIFY){
+      free(elem->client_ip);
     }
 
     //libero memoria non piu utilizzata
