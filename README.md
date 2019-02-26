@@ -1,106 +1,101 @@
 # talk-service
-Exam project - OS teaching 6 CFU - Università Sapienza Roma (Uniroma1)
+Exam project - Operating Systems teaching - Sapienza University of Rome
 
-Project specifications are in specs(ENGLISH).txt and specs(ITALIAN).txt.
+Both the server and the client are based on UNIX system calls.
 
-Sia il server che il client sono basati su chiamate di sistema UNIX.
-
-Per quanto riguarda l'implementazione delle strutture dati si è scelto di appoggiarsi alla libreria esterna GLib.
+Regarding the implementation of data structures, it was decided to rely on the GLib external library.
 
 ## server
-Scelte progettuali:
+Design choices:
 
-  * Server multithread:
-    il processo principale accetta nuove connessioni da parte dei client, per i quali vengono generati una coppia di thread di gestione e invio messaggi. Se il client è inattivo per un certo periodo di tempo, il server ne determina la chiusura, liberando così la memoria ad esso associata.
+  * Multithread server:
+    the main process accepts new connections from clients, for which a couple of management/sending threads are spawned. If the client is idle for a certain period of time, the server timeout it, thus freeing up the memory associated with it.
 
     - Connection handler thread:
-      si occupa di ricevere lo username dal client e di validarlo. In caso di username non corretto, lo comunica al client e ne aspetta uno nuovo. Tale thread poi si occupa di gestire i comandi inviati dal client e di generare un altro thread, che si occupa di notificare i client in "tempo reale" inviando messaggi custom. Essi possono essere richieste di connessione con un altro client, risposte a tali richieste e messaggi effetivi scambiati tra client e notifiche di vario genere mirate ad aggiornare le user-list presenti nei vari client.
+      takes care of receiving the username from the client and validating it. In case of incorrect username, it communicates it to the client and waits for a new one. This thread then handles the commands sent by the client and generates another thread, which is responsible for notifying clients in "real time" by sending custom messages. They can be requests to connect with another client, answers to these requests and actual messages exchanged between clients and notifications of various kinds aimed at updating the user-lists present in clients.
 
     - Sender thread:
-      il thread in questione riceve messaggi su una mailbox personale a cui ha accesso il relativo connection
-      handler. Una volta estratto il messaggio dalla coda, lo invia al relativo client.
+      the thread in question receives messages on a personal mailbox to which the related connection handler thread has access.  
+      Once the message has been extracted from the queue, it is sent to the relevant client.
 
-    - La sincronizzazione tra i due thread avviene tramite una coppia di semafori binari e una variabile visibile solo alla coppia stessa:
-      il primo semafore viene usato per il timing delle operazioni di inizializzazione, l'altro per determinare la terminazione del Sender thread notificata dal Connection handler. La variabile, invece, serve a notificare la necessità di terminare al Connection handler da parte del Sender thread nel caso di un SIGPIPE avvenuto durante l'invio delle notifiche.
+    - The synchronization between the two threads occurs through a pair of binary semaphores and a variable visible only to the couple itself:
+      the first semaphore is used for the timing of the initialization operations, the other to determine the termination of the Sender thread notified by the Connection handler. The variable, on the other hand, serves to notify the need to terminate the Sender thread to the Connection handler in the case of a SIGPIPE occurred during the sending of notifications.
 
-  * Il server gestisce i seguenti segnali:
+  * The server manages the following signals:
     - SIGTERM
     - SIGINT
     - SIGHUP
     - SIGPIPE
 
-    -Quando viene catturato SIGPIPE, la coppia di thread a causa della quale è avvenuta la segnalazione termina "gracefully".
+    -When SIGPIPE is captured, the thread pair, due to which the message occurred, terminates "gracefully".
 
-    -Negli altri casi il main thread aspetta che tutti i thread siano terminati "gracefully" e termina.
+    -In other cases the main thread waits for all threads to be "gracefully" terminated and ends.
 
-  * Strutture dati del server:
+  * Server data structures:
 
-      <code>user_list</code>: hash table contenente le strutture dati necessarie a rapresentare ogni singolo client connesso al servizio, la chiave d'accesso è lo username univoco scelto dal client. L'accesso è regolato da un semaforo binario globale.
-      Ogni elemento della lista è rappresentato da una struct, la quale ha come campi l'indirizzo ip del client in forma dotted e un flag di disponibilità. Attraverso il flag vengono effettuati (lato server) i controlli necessari affinchè l'integrità del servizio non venga compromessa durante la gestione delle varie attività.
+      `user_list`: hash table containing the data structures necessary to represent every single client connected to the service, the access key is the unique username chosen by the client. Access is regulated by a global binary semaphore.
+      Each element of the list is represented by a struct, which has, as fields, the ip address of the client in dotted form and an availability flag. Through the flag are made (server side) the necessary controls so that the integrity of the service is not compromised during the management of the various activities.
 
-      <code>mailbox_list</code>: hash table contenente le mailbox dei Sender thread su cui inviare i messaggi da spedire, anche qui la chiave d'accesso è lo username. Ogni mailbox è una coda asincrona thread safe che contiene stringhe codificate precedentemente dal connection handler thread.
+       `mailbox_list`: hash table containing the mailboxes of the Sender threads on which to send the messages to client, also here the username is the access key. Each mailbox is an asynchronous thread safe queue that contains strings previously encoded by the connection handler thread.
 
 ## client
-  Scelte progettuali:
+  Design choices:
 
-  * Client Multithread e shell utente che gestisce dei comandi user.
+  * Multithread client and user shell that manages user commands.
 
-  * Il client intergisce con il server attraverso dei comandi integrati nel client.
+  * The client interacts with the server through commands integrated into it.
 
-  * Ad ogni modifica della lista dei client connessi, il server notifica il thread di ricezione dei messagi del client che aggiorna la sua lista utenti.
+  * Each time the list of connected clients is changed, the server notifies the client's message receiving thread that updates its user list.
 
-  * Il client gestisce i seguenti segnali:
+  * The client manages the following signals:
     - SIGTERM
     - SIGINT
     - SIGHUP
     - SIGPIPE
-    una volta catturato uno di questi segnali il main thread aspetta che tutti i thread siano terminati "gracefully" e invia un messaggio di disconnessione al server.
+    once one of these signals is captured, the main thread waits for all threads to be "gracefully" terminated and sends a disconnection message to the server.
 
-  * Le strutture dati del client sono:
+  * The client data structures are:
 
-      <code>user_list</code> una Hash Table aggiornata in "tempo reale" contenente il nome, indirizzo IP e disponibilita' di ogni client connesso al server protetta da un semaforo.
+      `user_list`: an updated Hash Table in "real time" containing the name, IP address and availability of each client connected to the server protected by a semaphore.
 
-      <code>mail_box</code>  una mail box contente tutti i messaggi ricevuti dal server, la quale è una coda asincrona thread safe.
+      `mail_box`: a mail box containing all messages received from the server, which is a thread safe asynchronous queue.
 
-  * Rappresentazione degli stati del client tramite variabili globali.
+  * Representation of client states via global variables.
 
-  Comandi disponibili per l'utente:
+  Commands available to the user:
 
-  * <code>connect</code> : chiede all'utente a quale client connettersi e inoltra una richiesta di chat verso l'utente identificato.
-  * <code>list</code>    : stampa a schermo la lista aggiornata in tempo reale dei client connessi al server.
-  * <code>clear</code>   : pulisce lo schermo.
-  * <code>exit</code>    : invia un segnale di disconnessione al server e chiude il client.
-  * <code>help</code>    : stampa a schermo la lista dei comandi disponibili.
-
-
-## complilazione
-
-   Innanzi tutto bisogna installare la libreria Glib attraverso il seguente comando, per esempio su un sistema linux si avrà:
-
-* <code>sudo apt-get install libglib2.0-dev</code>
+  * `connect <username>`: asks the user which client to connect to and forwards a chat request to the identified user.
+  * `list`: print the updated list in real time of the clients connected to the server.
+  * `clear`: clean the terminal.
+  * `exit`: sends a disconnection signal to the server and closes the client.
+  * `help`: print the list of available commands on the screen.
 
 
-Succesivamente, si deve inserire l'indirizzo IPv4, associato alla macchina su cui viene eseguito il server, nel file <code>common.h</code> e infine utilizzare il <code>makefile</code> per compilare:
-   * <code>make</code> compila sia il server che il client in maniera efficiente, cioè se vi è bisogno di aggiornare ciascun eseguibile.
+## Build
 
-   oppure:
-   * <code>make server</code> compila solo il server.
-   * <code>make client</code> compila solo il client.
-   * <code>make clean</code> elimina gli eseguibili generati da compilazioni precedenti.
+   First you need to install the Glib library through the following command, for example on a linux system you will have:
+
+* `sudo apt-get install libglib2.0-dev`
 
 
-## esecuzione
+Next, you must enter the IPv4 address associated with the machine on which the server is running, in the common.h file and finally use the makefile to compile:
 
-   Per eseguire il server:
-    <code>./server</code>
+`make` compiles both the server and the client efficiently, that is, if there is a need to update each executable.
 
-   Per arrestarlo:
-   CTRL-C
+or:
 
+* `make server` compiles only the server.
+* `make client` compiles only the client.
+* `make clean` deletes the executables generated by previous compilations.
 
-   Per eseguire il client:
-   <code>./client</code>
+## Execution
 
-   Per arrestarlo:
-   * CTRL-C
-   * digitare la stringa exit e premere invio (se non si è in chat).
+To run the server: `./server`
+
+To stop it: `CTRL-C`
+
+To run the client: `./client`
+
+To stop it:
+  * `CTRL-C`
+  * Or type exit and press enter (if not in chat).
